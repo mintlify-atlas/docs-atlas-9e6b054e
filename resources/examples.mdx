@@ -1,0 +1,584 @@
+---
+title: Examples and Use Cases
+description: Real-world examples showing how to build applications with Horse in different environments and deployment scenarios
+---
+
+Horse is incredibly versatile and supports multiple deployment scenarios. This page shows real examples from the samples directory, demonstrating how to build everything from simple console applications to Windows services and web server modules.
+
+## Console Applications
+
+### Basic REST API (Delphi)
+
+The simplest way to get started with Horse is a console application:
+
+```delphi
+program Console;
+
+{$APPTYPE CONSOLE}
+
+uses
+  Horse,
+  System.SysUtils;
+
+begin
+  {$IFDEF MSWINDOWS}
+  IsConsole := False;
+  ReportMemoryLeaksOnShutdown := True;
+  {$ENDIF}
+
+  THorse.Get('/ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong');
+    end);
+
+  THorse.Listen(9000,
+    procedure
+    begin
+      Writeln(Format('Server is running on %s:%d', [THorse.Host, THorse.Port]));
+      Readln;
+    end);
+end.
+```
+
+<Note>
+This example demonstrates the minimal setup needed for a Horse server. The callback in `Listen` is executed after the server starts.
+</Note>
+
+### Basic REST API (Lazarus)
+
+For Lazarus/Free Pascal, use procedure-based routing:
+
+```delphi
+program Console;
+
+{$MODE DELPHI}{$H+}
+
+uses
+  {$IFDEF UNIX}{$IFDEF UseCThreads}
+  cthreads,
+  {$ENDIF}{$ENDIF}
+  Horse;
+
+procedure GetPing(Req: THorseRequest; Res: THorseResponse);
+begin
+  Res.Send('Ping');
+end;
+
+begin
+  THorse.Get('/ping', GetPing);
+  THorse.Listen(9000);
+end.
+```
+
+## GUI Applications
+
+### VCL Application with Start/Stop
+
+Horse can be embedded in VCL applications for management interfaces:
+
+```delphi
+unit Main.Form;
+
+interface
+
+uses
+  Winapi.Windows, System.Classes, Vcl.Controls, Vcl.Forms,
+  Vcl.StdCtrls, Vcl.Buttons, System.SysUtils;
+
+type
+  TFrmVCL = class(TForm)
+    btnStop: TBitBtn;
+    btnStart: TBitBtn;
+    edtPort: TEdit;
+    procedure btnStopClick(Sender: TObject);
+    procedure btnStartClick(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
+    procedure FormClose(Sender: TObject; var Action: TCloseAction);
+  private
+    procedure Status;
+    procedure Start;
+    procedure Stop;
+  end;
+
+implementation
+
+uses Horse;
+
+procedure TFrmVCL.FormCreate(Sender: TObject);
+begin
+  THorse.Get('ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong');
+    end);
+end;
+
+procedure TFrmVCL.Start;
+begin
+  // Need to set "HORSE_VCL" compilation directive
+  THorse.Listen(StrToInt(edtPort.Text));
+end;
+
+procedure TFrmVCL.Stop;
+begin
+  THorse.StopListen;
+end;
+
+procedure TFrmVCL.Status;
+begin
+  btnStop.Enabled := THorse.IsRunning;
+  btnStart.Enabled := not THorse.IsRunning;
+  edtPort.Enabled := not THorse.IsRunning;
+end;
+
+procedure TFrmVCL.btnStartClick(Sender: TObject);
+begin
+  Start;
+  Status;
+end;
+
+procedure TFrmVCL.btnStopClick(Sender: TObject);
+begin
+  Stop;
+  Status;
+end;
+
+procedure TFrmVCL.FormClose(Sender: TObject; var Action: TCloseAction);
+begin
+  if THorse.IsRunning then
+    Stop;
+end;
+
+end.
+```
+
+<Warning>
+**Important**: Set the `HORSE_VCL` compilation directive in your project options for VCL applications.
+</Warning>
+
+### Lazarus LCL Application
+
+Similar functionality is available for Lazarus applications:
+
+```delphi
+unit Views.Main;
+
+{$MODE DELPHI}{$H+}
+
+interface
+
+uses
+  Classes, SysUtils, Forms, Controls, StdCtrls, Buttons, Horse;
+
+type
+  TFrmMain = class(TForm)
+    btnStart: TBitBtn;
+    btnStop: TBitBtn;
+    edtPort: TEdit;
+    procedure btnStartClick(Sender: TObject);
+    procedure btnStopClick(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
+  private
+    procedure Status;
+    procedure Start;
+    procedure Stop;
+  end;
+
+implementation
+
+procedure DoPing(Req: THorseRequest; Res: THorseResponse);
+begin
+  Res.Send('pong');
+end;
+
+procedure TFrmMain.FormCreate(Sender: TObject);
+begin
+  THorse.Get('/ping', DoPing);
+end;
+
+procedure TFrmMain.Status;
+begin
+  btnStop.Enabled := THorse.IsRunning;
+  btnStart.Enabled := not THorse.IsRunning;
+  edtPort.Enabled := not THorse.IsRunning;
+end;
+
+procedure TFrmMain.Start;
+begin
+  // Need to set "HORSE_LCL" compilation directive
+  THorse.Listen(StrToInt(edtPort.Text));
+end;
+
+procedure TFrmMain.Stop;
+begin
+  THorse.StopListen;
+end;
+
+end.
+```
+
+<Warning>
+**Important**: Set the `HORSE_LCL` compilation directive in your project options for LCL applications.
+</Warning>
+
+## SSL/TLS Support
+
+Horse supports SSL/TLS for secure HTTPS connections:
+
+```delphi
+uses Horse, IdSSLOpenSSL;
+
+procedure TfrmMain.Start;
+begin
+  // Configure SSL/TLS
+  THorse.IOHandleSSL
+    .KeyFile(leKey.Text)
+    .CertFile(leCrt.Text)
+    .OnGetPassword(Self.OnGetPassword)
+    .SSLVersions([sslvTLSv1_2])
+    .Active(True);
+
+  THorse.Listen(edtPort.Value,
+    procedure
+    begin
+      StatusBar1.Panels.Items[0].Text := 
+        Format('Secure Server is running on https://%s:%d', 
+               [THorse.Host, THorse.Port]);
+    end);
+end;
+
+procedure TfrmMain.OnGetPassword(var Password: string);
+begin
+  Password := lePassword.Text;
+end;
+```
+
+<Steps>
+  <Step title="Generate SSL certificates">
+    Use OpenSSL to generate self-signed certificates for testing:
+    
+    ```bash
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout cert.key -out cert.crt
+    ```
+  </Step>
+  
+  <Step title="Add SSL libraries">
+    Include `libeay32.dll` and `ssleay32.dll` (or OpenSSL 1.1+ equivalents) in your executable folder.
+  </Step>
+  
+  <Step title="Configure Horse">
+    Use `IOHandleSSL` to configure the key file, certificate file, and SSL versions.
+  </Step>
+</Steps>
+
+<Warning>
+**Production Use**: Self-signed certificates are not recommended for production. Use certificates from trusted authorities like Let's Encrypt.
+</Warning>
+
+## Web Server Modules
+
+### Apache Module
+
+Deploy Horse as an Apache module:
+
+```delphi
+library Apache;
+
+uses Horse, Web.HTTPD24Impl;
+
+var
+  ApacheModuleData: TApacheModuleData;
+
+exports
+  ApacheModuleData name 'apache_horse_module';
+
+begin
+  // Need to set "HORSE_APACHE" compilation directive
+
+  THorse.DefaultModule := @ApacheModuleData;
+  THorse.HandlerName := 'apache_horse_module-handle';
+
+  THorse.Get('/ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong');
+    end);
+
+  THorse.Listen;
+end.
+```
+
+**Apache Configuration** (`httpd.conf`):
+
+```apache
+LoadModule apache_horse_module modules/Apache.dll
+
+<Location /apache_horse>
+  SetHandler apache_horse_module-handle
+</Location>
+```
+
+Access your API at: `http://localhost/apache_horse/ping`
+
+<Note>
+The dynamic library extension is `.dll` on Windows and `.so` on Linux.
+</Note>
+
+### ISAPI Module
+
+Deploy Horse as an IIS ISAPI extension:
+
+```delphi
+library ISAPI;
+
+uses Horse;
+
+begin
+  // Need to set "HORSE_ISAPI" compilation directive
+
+  THorse.Get('/ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong');
+    end);
+
+  THorse.Listen;
+end.
+```
+
+<Steps>
+  <Step title="Compile as library">
+    Set project type to "Library" and add the `HORSE_ISAPI` compilation directive.
+  </Step>
+  
+  <Step title="Deploy to IIS">
+    Copy the compiled `.dll` to your IIS application directory.
+  </Step>
+  
+  <Step title="Configure IIS">
+    Add an ISAPI extension handler in IIS Manager pointing to your `.dll` file.
+  </Step>
+</Steps>
+
+### CGI Application
+
+Deploy as a CGI executable:
+
+```delphi
+program CGI;
+
+{$APPTYPE CONSOLE}
+
+uses Horse;
+
+begin
+  // Need to set "HORSE_CGI" compilation directive
+
+  THorse.Get('/ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong');
+    end);
+
+  THorse.Listen;
+end.
+```
+
+<Warning>
+CGI is the slowest deployment method as a new process is spawned for each request. Consider FastCGI for better performance.
+</Warning>
+
+## Service Applications
+
+### Linux Daemon
+
+Run Horse as a Linux daemon:
+
+```delphi
+program Daemon;
+
+{$APPTYPE CONSOLE}
+
+uses Horse, System.SysUtils;
+
+begin
+  // Need to set "HORSE_DAEMON" compilation directive
+
+  THorse.Get('/ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong');
+    end);
+
+  THorse.Listen;
+end.
+```
+
+Create a systemd service file:
+
+```ini
+[Unit]
+Description=Horse API Service
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/horse-api
+ExecStart=/opt/horse-api/daemon
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Windows Service
+
+Horse supports deployment as a Windows service with the `HORSE_WINSVC` directive. The full implementation is available in the `samples/delphi/winsvc` directory.
+
+<Note>
+Windows service implementation requires additional service management code. Refer to the sample in `samples/delphi/winsvc/` for a complete example.
+</Note>
+
+## Complete REST API Example
+
+Here's a more comprehensive REST API with multiple endpoints:
+
+```delphi
+program RestAPI;
+
+{$APPTYPE CONSOLE}
+
+uses
+  Horse,
+  System.JSON,
+  System.SysUtils;
+
+type
+  TUser = record
+    Id: Integer;
+    Name: string;
+    Email: string;
+  end;
+
+var
+  Users: array[1..3] of TUser = (
+    (Id: 1; Name: 'John Doe'; Email: 'john@example.com'),
+    (Id: 2; Name: 'Jane Smith'; Email: 'jane@example.com'),
+    (Id: 3; Name: 'Bob Wilson'; Email: 'bob@example.com')
+  );
+
+procedure GetUsers(Req: THorseRequest; Res: THorseResponse);
+var
+  JSONArray: TJSONArray;
+  JSONUser: TJSONObject;
+  User: TUser;
+begin
+  JSONArray := TJSONArray.Create;
+  try
+    for User in Users do
+    begin
+      JSONUser := TJSONObject.Create;
+      JSONUser.AddPair('id', TJSONNumber.Create(User.Id));
+      JSONUser.AddPair('name', User.Name);
+      JSONUser.AddPair('email', User.Email);
+      JSONArray.AddElement(JSONUser);
+    end;
+    Res.Send<TJSONArray>(JSONArray);
+  finally
+    JSONArray.Free;
+  end;
+end;
+
+procedure GetUser(Req: THorseRequest; Res: THorseResponse);
+var
+  UserId: Integer;
+  JSONUser: TJSONObject;
+  User: TUser;
+begin
+  UserId := Req.Params['id'].ToInteger;
+  
+  for User in Users do
+  begin
+    if User.Id = UserId then
+    begin
+      JSONUser := TJSONObject.Create;
+      try
+        JSONUser.AddPair('id', TJSONNumber.Create(User.Id));
+        JSONUser.AddPair('name', User.Name);
+        JSONUser.AddPair('email', User.Email);
+        Res.Send<TJSONObject>(JSONUser);
+      finally
+        JSONUser.Free;
+      end;
+      Exit;
+    end;
+  end;
+  
+  Res.Status(404).Send('User not found');
+end;
+
+begin
+  // Routes
+  THorse.Get('/users', GetUsers);
+  THorse.Get('/users/:id', GetUser);
+  
+  // Start server
+  THorse.Listen(9000,
+    procedure
+    begin
+      Writeln('REST API running on http://localhost:9000');
+      Writeln('Try: http://localhost:9000/users');
+      Writeln('     http://localhost:9000/users/1');
+      Readln;
+    end);
+end.
+```
+
+## Sample Projects
+
+Horse includes numerous sample projects demonstrating different use cases:
+
+<CardGroup cols={2}>
+  <Card title="Console Applications" icon="terminal">
+    Basic standalone server applications
+    - `samples/delphi/console/`
+    - `samples/lazarus/console/`
+  </Card>
+  
+  <Card title="GUI Applications" icon="window-maximize">
+    VCL and LCL applications with UI
+    - `samples/delphi/vcl/`
+    - `samples/lazarus/lcl/`
+  </Card>
+  
+  <Card title="Web Server Modules" icon="server">
+    Apache, ISAPI, and CGI modules
+    - `samples/delphi/apache/`
+    - `samples/delphi/isapi/`
+    - `samples/delphi/cgi/`
+  </Card>
+  
+  <Card title="Services" icon="gear">
+    Daemon and Windows Service examples
+    - `samples/delphi/daemon/`
+    - `samples/delphi/winsvc/`
+  </Card>
+</CardGroup>
+
+<Note>
+All sample projects are available in the [Horse GitHub repository](https://github.com/HashLoad/horse/tree/master/samples).
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Ecosystem" href="/resources/ecosystem" icon="puzzle-piece">
+    Explore middlewares and community tools
+  </Card>
+  
+  <Card title="Deployment" href="/deployment/console" icon="rocket">
+    Learn about production deployment strategies
+  </Card>
+</CardGroup>

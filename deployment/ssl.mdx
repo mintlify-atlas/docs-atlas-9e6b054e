@@ -1,0 +1,649 @@
+---
+title: SSL/TLS Configuration
+description: Configure HTTPS encryption for secure Horse applications across all deployment types
+---
+
+## Overview
+
+Horse supports SSL/TLS encryption for secure HTTPS connections across multiple deployment types. This guide covers SSL configuration for Console, VCL, and Daemon deployments using OpenSSL.
+
+<Note>
+SSL/TLS support is available for Console, VCL, and Daemon providers using the built-in IOHandleSSL interface. For Apache, ISAPI, and CGI deployments, SSL is typically configured at the web server level.
+</Note>
+
+## Supported Deployment Types
+
+| Deployment | SSL Method | Configuration |
+|------------|------------|---------------|
+| Console | IOHandleSSL | In application code |
+| VCL | IOHandleSSL | In application code |
+| Daemon | IOHandleSSL | In application code |
+| Apache | Apache SSL | httpd.conf |
+| ISAPI | IIS SSL | IIS Manager |
+| CGI | Web Server SSL | Web server config |
+
+## Requirements
+
+### OpenSSL Libraries
+
+<Tabs>
+  <Tab title="Windows">
+    Download OpenSSL DLLs and place them in your application directory:
+    
+    - `libeay32.dll` or `libcrypto-1_1-x64.dll`
+    - `ssleay32.dll` or `libssl-1_1-x64.dll`
+    
+    Download from:
+    - https://slproweb.com/products/Win32OpenSSL.html
+    - https://wiki.openssl.org/index.php/Binaries
+    
+    ```powershell
+    # Verify DLLs are in the same directory as your executable
+    dir *.dll
+    ```
+  </Tab>
+  
+  <Tab title="Linux">
+    OpenSSL is usually pre-installed. Verify:
+    
+    ```bash
+    # Check OpenSSL version
+    openssl version
+    
+    # Install if needed (Debian/Ubuntu)
+    sudo apt-get install openssl libssl-dev
+    
+    # Install if needed (RHEL/CentOS)
+    sudo yum install openssl openssl-devel
+    ```
+  </Tab>
+  
+  <Tab title="macOS">
+    ```bash
+    # Check OpenSSL
+    openssl version
+    
+    # Install via Homebrew if needed
+    brew install openssl
+    ```
+  </Tab>
+</Tabs>
+
+### SSL Certificates
+
+You need:
+- **Certificate file** (`.crt` or `.pem`): Public certificate
+- **Private key file** (`.key`): Private key
+- **CA bundle** (optional): Certificate chain
+
+## Generating Self-Signed Certificates
+
+<Warning>
+Self-signed certificates are for **testing and development only**. For production, use certificates from a trusted Certificate Authority (CA) like Let's Encrypt.
+</Warning>
+
+### OpenSSL Command
+
+```bash
+# Generate private key and certificate in one command
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout cert.key -out cert.crt
+
+# You'll be prompted for:
+# - Country Name (2 letter code)
+# - State or Province Name
+# - Locality Name (city)
+# - Organization Name
+# - Common Name (your domain or IP)
+# - Email Address
+```
+
+### PowerShell (Windows Alternative)
+
+```powershell
+# Create self-signed certificate in Windows Certificate Store
+$cert = New-SelfSignedCertificate -DnsName "localhost" `
+  -CertStoreLocation "cert:\LocalMachine\My" `
+  -KeyAlgorithm RSA -KeyLength 2048 `
+  -NotAfter (Get-Date).AddYears(1)
+
+# Export certificate
+$certPath = "C:\certs\cert.crt"
+$keyPath = "C:\certs\cert.key"
+
+Export-Certificate -Cert $cert -FilePath $certPath
+```
+
+## Console Application with SSL
+
+### Basic SSL Configuration
+
+```delphi
+program ConsoleSSL;
+
+{$APPTYPE CONSOLE}
+{$R *.res}
+
+uses
+  Horse,
+  IdSSLOpenSSL,
+  System.SysUtils;
+
+begin
+  // Configure SSL
+  THorse.IOHandleSSL
+    .CertFile('cert.crt')        // Certificate file
+    .KeyFile('cert.key')         // Private key file
+    .Active(True);               // Enable SSL
+
+  // Configure routes
+  THorse.Get('/ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong via HTTPS');
+    end);
+
+  // Listen on HTTPS port (443)
+  THorse.Listen(443,
+    procedure
+    begin
+      Writeln(Format('HTTPS Server running on https://%s:%d', 
+        [THorse.Host, THorse.Port]));
+      Writeln('Press ENTER to stop');
+      Readln;
+    end);
+end.
+```
+
+### Advanced SSL Configuration
+
+```delphi
+program AdvancedSSL;
+
+{$APPTYPE CONSOLE}
+{$R *.res}
+
+uses
+  Horse,
+  IdSSLOpenSSL,
+  System.SysUtils;
+
+procedure GetSSLPassword(var Password: string);
+begin
+  // Provide password for encrypted private key
+  Password := 'your-key-password';
+end;
+
+begin
+  // Advanced SSL configuration
+  THorse.IOHandleSSL
+    .CertFile('cert.crt')                    // Certificate
+    .KeyFile('cert.key')                     // Private key
+    .RootCertFile('ca-bundle.crt')          // CA chain (optional)
+    .DHParamsFile('dhparams.pem')           // DH parameters (optional)
+    .OnGetPassword(GetSSLPassword)           // Key password callback
+    .Method(sslvTLSv1_2)                    // TLS method
+    .SSLVersions([sslvTLSv1_2, sslvTLSv1_3]) // Allowed versions
+    .CipherList('HIGH:!aNULL:!MD5')         // Cipher suite
+    .Active(True);                           // Enable SSL
+
+  THorse.Get('/secure',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('{"message": "Secure connection established"}');
+    end);
+
+  THorse.Listen(443,
+    procedure
+    begin
+      Writeln('HTTPS Server started on port 443');
+      Writeln('SSL/TLS Configuration:');
+      Writeln('  - TLS 1.2 and 1.3 enabled');
+      Writeln('  - Strong ciphers only');
+      Writeln('Press ENTER to stop');
+      Readln;
+    end);
+end.
+```
+
+## VCL Application with SSL
+
+```delphi
+unit Main.Form;
+
+interface
+
+uses
+  Winapi.Windows, System.SysUtils, System.Classes, Vcl.Forms,
+  Vcl.StdCtrls, Vcl.ComCtrls, Vcl.ExtCtrls, Horse, IdSSLOpenSSL;
+
+type
+  TfrmMain = class(TForm)
+    edtPort: TEdit;
+    btnStart: TButton;
+    btnStop: TButton;
+    leKeyFile: TLabeledEdit;
+    leCertFile: TLabeledEdit;
+    btnBrowseKey: TButton;
+    btnBrowseCert: TButton;
+    lePassword: TLabeledEdit;
+    StatusBar: TStatusBar;
+    OpenDialog: TOpenDialog;
+    procedure btnStartClick(Sender: TObject);
+    procedure btnStopClick(Sender: TObject);
+    procedure btnBrowseKeyClick(Sender: TObject);
+    procedure btnBrowseCertClick(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
+  private
+    procedure StartServer;
+    procedure StopServer;
+    procedure OnGetPassword(var Password: string);
+  end;
+
+var
+  frmMain: TfrmMain;
+
+implementation
+
+{$R *.dfm}
+
+procedure TfrmMain.FormCreate(Sender: TObject);
+begin
+  edtPort.Text := '443';
+  
+  THorse.Get('/ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('secure pong');
+    end);
+end;
+
+procedure TfrmMain.OnGetPassword(var Password: string);
+begin
+  Password := lePassword.Text;
+end;
+
+procedure TfrmMain.StartServer;
+begin
+  // Configure SSL
+  THorse.IOHandleSSL
+    .KeyFile(leKeyFile.Text)
+    .CertFile(leCertFile.Text)
+    .OnGetPassword(Self.OnGetPassword)
+    .SSLVersions([sslvTLSv1_2, sslvTLSv1_3])
+    .Active(True);
+
+  // Need to set "HORSE_VCL" compilation directive
+  THorse.Listen(StrToInt(edtPort.Text),
+    procedure
+    begin
+      StatusBar.Panels[0].Text := 
+        Format('HTTPS Server running on https://%s:%d', 
+          [THorse.Host, THorse.Port]);
+    end);
+end;
+
+procedure TfrmMain.StopServer;
+begin
+  THorse.StopListen;
+  StatusBar.Panels[0].Text := 'Stopped';
+end;
+
+procedure TfrmMain.btnStartClick(Sender: TObject);
+begin
+  StartServer;
+end;
+
+procedure TfrmMain.btnStopClick(Sender: TObject);
+begin
+  StopServer;
+end;
+
+procedure TfrmMain.btnBrowseKeyClick(Sender: TObject);
+begin
+  OpenDialog.Filter := 'Key Files|*.key|All Files|*.*';
+  if OpenDialog.Execute then
+    leKeyFile.Text := OpenDialog.FileName;
+end;
+
+procedure TfrmMain.btnBrowseCertClick(Sender: TObject);
+begin
+  OpenDialog.Filter := 'Certificate Files|*.crt;*.pem|All Files|*.*';
+  if OpenDialog.Execute then
+    leCertFile.Text := OpenDialog.FileName;
+end;
+
+end.
+```
+
+## Daemon with SSL
+
+```delphi
+program SecureDaemon;
+
+{$APPTYPE CONSOLE}
+{$R *.res}
+
+uses
+  Horse,
+  IdSSLOpenSSL,
+  System.SysUtils;
+
+begin
+  // Configure SSL for daemon
+  THorse.IOHandleSSL
+    .CertFile('/etc/horse-api/cert.pem')
+    .KeyFile('/etc/horse-api/key.pem')
+    .SSLVersions([sslvTLSv1_2, sslvTLSv1_3])
+    .CipherList('ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256')
+    .Active(True);
+
+  THorse.Get('/health',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('{"status": "healthy", "secure": true}');
+    end);
+
+  // Listen on HTTPS port
+  THorse.Listen(443);
+end.
+```
+
+## SSL Configuration Options
+
+### IOHandleSSL Interface
+
+```delphi
+type
+  IHorseProviderIOHandleSSL = interface
+    function Active: Boolean; overload;
+    function Active(const AValue: Boolean): IHorseProviderIOHandleSSL; overload;
+    
+    function CertFile: string; overload;
+    function CertFile(const AValue: string): IHorseProviderIOHandleSSL; overload;
+    
+    function KeyFile: string; overload;
+    function KeyFile(const AValue: string): IHorseProviderIOHandleSSL; overload;
+    
+    function RootCertFile: string; overload;
+    function RootCertFile(const AValue: string): IHorseProviderIOHandleSSL; overload;
+    
+    function Method: TIdSSLVersion; overload;
+    function Method(const AValue: TIdSSLVersion): IHorseProviderIOHandleSSL; overload;
+    
+    function SSLVersions: TIdSSLVersions; overload;
+    function SSLVersions(const AValue: TIdSSLVersions): IHorseProviderIOHandleSSL; overload;
+    
+    function CipherList: string; overload;
+    function CipherList(const AValue: string): IHorseProviderIOHandleSSL; overload;
+    
+    function DHParamsFile: string; overload;
+    function DHParamsFile(const AValue: string): IHorseProviderIOHandleSSL; overload;
+    
+    function OnGetPassword: TPasswordEvent; overload;
+    function OnGetPassword(const AValue: TPasswordEvent): IHorseProviderIOHandleSSL; overload;
+  end;
+```
+
+### SSL/TLS Versions
+
+```delphi
+// Available SSL/TLS versions
+type
+  TIdSSLVersion = (sslvSSLv2, sslvSSLv3, sslvTLSv1, sslvTLSv1_1, sslvTLSv1_2);
+  TIdSSLVersions = set of TIdSSLVersion;
+
+// Recommended configuration (TLS 1.2 and 1.3 only)
+THorse.IOHandleSSL
+  .SSLVersions([sslvTLSv1_2])  // Add sslvTLSv1_3 when available
+  .Active(True);
+```
+
+### Cipher Suites
+
+```delphi
+// Strong cipher configuration
+THorse.IOHandleSSL
+  .CipherList(
+    'ECDHE-ECDSA-AES128-GCM-SHA256:' +
+    'ECDHE-RSA-AES128-GCM-SHA256:' +
+    'ECDHE-ECDSA-AES256-GCM-SHA384:' +
+    'ECDHE-RSA-AES256-GCM-SHA384'
+  )
+  .Active(True);
+
+// Or use OpenSSL HIGH security level
+THorse.IOHandleSSL
+  .CipherList('HIGH:!aNULL:!MD5:!3DES')
+  .Active(True);
+```
+
+## Production SSL with Let's Encrypt
+
+### Obtaining Certificates
+
+```bash
+# Install certbot
+sudo apt-get install certbot
+
+# Obtain certificate
+sudo certbot certonly --standalone -d yourdomain.com
+
+# Certificates will be in:
+# /etc/letsencrypt/live/yourdomain.com/fullchain.pem
+# /etc/letsencrypt/live/yourdomain.com/privkey.pem
+```
+
+### Using Let's Encrypt Certificates
+
+```delphi
+program ProductionServer;
+
+{$APPTYPE CONSOLE}
+
+uses
+  Horse,
+  IdSSLOpenSSL,
+  System.SysUtils;
+
+begin
+  THorse.IOHandleSSL
+    .CertFile('/etc/letsencrypt/live/yourdomain.com/fullchain.pem')
+    .KeyFile('/etc/letsencrypt/live/yourdomain.com/privkey.pem')
+    .SSLVersions([sslvTLSv1_2])
+    .Active(True);
+
+  THorse.Get('/api/status',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('{"status": "production"}');
+    end);
+
+  THorse.Listen(443);
+end.
+```
+
+### Auto-Renewal Setup
+
+```bash
+# Test renewal
+sudo certbot renew --dry-run
+
+# Setup auto-renewal (cron)
+sudo crontab -e
+
+# Add line (checks twice daily):
+0 0,12 * * * certbot renew --quiet --post-hook "systemctl reload horse-api"
+```
+
+## HTTP to HTTPS Redirect
+
+### Dual Port Setup
+
+```delphi
+uses
+  Horse,
+  System.Classes,
+  System.SysUtils;
+
+procedure RedirectToHTTPS(Req: THorseRequest; Res: THorseResponse; Next: TProc);
+var
+  Host: string;
+begin
+  Host := Req.Headers['Host'];
+  Res.Status(301)
+    .AddHeader('Location', 'https://' + Host + Req.RawWebRequest.PathInfo)
+    .Send('Redirecting to HTTPS');
+end;
+
+begin
+  // HTTP Server (port 80) - redirects to HTTPS
+  // Note: You'll need to run two separate instances
+  
+  // HTTPS Server (port 443)
+  THorse.IOHandleSSL
+    .CertFile('cert.crt')
+    .KeyFile('cert.key')
+    .Active(True);
+
+  THorse.Get('/secure',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('Secure page');
+    end);
+
+  THorse.Listen(443);
+end.
+```
+
+## Testing SSL Configuration
+
+### Command Line Testing
+
+```bash
+# Test HTTPS connection
+curl -k https://localhost:443/ping
+
+# Show certificate details
+openssl s_client -connect localhost:443 -showcerts
+
+# Test specific TLS version
+openssl s_client -connect localhost:443 -tls1_2
+
+# Check certificate expiration
+echo | openssl s_client -connect localhost:443 2>/dev/null | \
+  openssl x509 -noout -dates
+```
+
+### Browser Testing
+
+1. Navigate to `https://localhost:443/ping`
+2. Accept security warning (for self-signed certificates)
+3. Check certificate details in browser
+
+## Troubleshooting
+
+### Common SSL Errors
+
+<Warning>
+**Error: Could not load SSL library**
+- OpenSSL DLLs missing or wrong version
+- Place `libeay32.dll` and `ssleay32.dll` in application directory
+- Or install OpenSSL system-wide
+</Warning>
+
+<Warning>
+**Error: Error loading private key file**
+- Wrong file path
+- Encrypted key without password callback
+- Incorrect key file format
+</Warning>
+
+<Warning>
+**Error: Certificate and private key do not match**
+- Certificate and key from different pairs
+- Regenerate certificate and key together
+</Warning>
+
+### Enable SSL Debug Logging
+
+```delphi
+uses
+  IdSSLOpenSSL;
+
+begin
+  // Enable OpenSSL debugging
+  {$IFDEF DEBUG}
+  // Add logging callback if needed
+  {$ENDIF}
+  
+  THorse.IOHandleSSL
+    .CertFile('cert.crt')
+    .KeyFile('cert.key')
+    .Active(True);
+    
+  THorse.Listen(443);
+end.
+```
+
+### Certificate Validation Issues
+
+```bash
+# Verify certificate
+openssl x509 -in cert.crt -text -noout
+
+# Verify private key
+openssl rsa -in cert.key -check
+
+# Verify certificate and key match
+openssl x509 -noout -modulus -in cert.crt | openssl md5
+openssl rsa -noout -modulus -in cert.key | openssl md5
+# MD5 hashes should match
+```
+
+## Security Best Practices
+
+<Steps>
+  <Step title="Use Strong TLS Versions">
+    ✅ Enable TLS 1.2 and 1.3 only  
+    ❌ Disable SSL 3.0, TLS 1.0, TLS 1.1  
+    
+    ```delphi
+    .SSLVersions([sslvTLSv1_2])
+    ```
+  </Step>
+  
+  <Step title="Use Strong Cipher Suites">
+    ```delphi
+    .CipherList('HIGH:!aNULL:!MD5:!3DES')
+    ```
+  </Step>
+  
+  <Step title="Secure Private Keys">
+    ```bash
+    # Restrict key file permissions (Linux)
+    chmod 600 cert.key
+    chown root:root cert.key
+    ```
+  </Step>
+  
+  <Step title="Use Valid Certificates">
+    ✅ Production: Let's Encrypt or commercial CA  
+    ❌ Don't use self-signed in production  
+  </Step>
+  
+  <Step title="Monitor Certificate Expiration">
+    Setup alerts 30 days before expiration
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Console Deployment" icon="terminal" href="/deployment/console">
+    Deploy with HTTPS as console application
+  </Card>
+  <Card title="Daemon Deployment" icon="server" href="/deployment/daemon">
+    Run secure daemon in production
+  </Card>
+</CardGroup>

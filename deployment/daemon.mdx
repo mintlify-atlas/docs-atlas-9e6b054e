@@ -1,0 +1,638 @@
+---
+title: Daemon/Service Deployment
+description: Deploy Horse as a Linux daemon or Windows service for production environments
+---
+
+## Overview
+
+Daemon deployment allows you to run Horse applications as background services on Linux systems. Daemons automatically start on boot, run without user interaction, and provide production-ready service management with proper logging and signal handling.
+
+<Note>
+Daemon deployment uses the `HORSE_DAEMON` conditional define on Linux. For Windows services, use the Windows Service provider instead.
+</Note>
+
+## When to Use Daemon Deployment
+
+- **Production Linux Servers**: Background services that start on boot
+- **Systemd Integration**: Native integration with systemd service manager
+- **Unattended Operation**: Services that run without user interaction
+- **Server Applications**: APIs and microservices on Linux
+- **Process Management**: Automatic restart on failure
+- **Logging Integration**: System logging via syslog
+
+## Platform Support
+
+| Platform | Deployment Type | Configuration |
+|----------|----------------|---------------|
+| Linux | Daemon with systemd | `HORSE_DAEMON` |
+| Windows | Windows Service | Use WinSvc sample (separate from HORSE_DAEMON) |
+| macOS | launchd Service | Use daemon mode with launchd config |
+
+## Required Conditional Define
+
+<Warning>
+For Linux daemon deployment, you **must** add `HORSE_DAEMON` to your project's conditional defines.
+</Warning>
+
+<Steps>
+  <Step title="Open Project Options">
+    Go to **Project → Options → Delphi Compiler → Compiling**
+  </Step>
+  
+  <Step title="Add Conditional Define">
+    Add: `HORSE_DAEMON`
+  </Step>
+  
+  <Step title="Set Target Platform">
+    Set target to **Linux64** or appropriate Linux platform
+  </Step>
+  
+  <Step title="Rebuild Project">
+    Clean and rebuild your project
+  </Step>
+</Steps>
+
+## Linux Daemon Example
+
+### Delphi Implementation
+
+```delphi
+program Daemon;
+
+{$APPTYPE CONSOLE}
+{$R *.res}
+
+uses Horse, System.SysUtils;
+
+begin
+  // Need to set "HORSE_DAEMON" compilation directive
+
+  THorse.Get('/ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong');
+    end);
+
+  THorse.Listen;
+end.
+```
+
+### Lazarus/FPC Implementation
+
+```pascal
+program daemon;
+
+{$mode objfpc}{$H+}
+
+uses
+  {$IFDEF UNIX}{$IFDEF UseCThreads}
+  cthreads,
+  {$ENDIF}{$ENDIF}
+  Classes, SysUtils, Horse;
+
+procedure GetPing(Req: THorseRequest; Res: THorseResponse);
+begin
+  Res.Send('pong');
+end;
+
+procedure OnListen;
+begin
+  if THorse.IsRunning then
+    Writeln(Format('Server is running on %s:%d', [THorse.Host, THorse.Port]));
+  if not THorse.IsRunning then
+    Writeln('Server stopped');
+end;
+
+var
+  sCMD: string;
+  bTerminated: Boolean;
+begin
+  // Need to set "HORSE_DAEMON" compilation directive
+  THorse.Get('/ping', @GetPing);
+  bTerminated := False;
+  WriteLn('COMMANDS: START, STOP, TERMINATE');
+  while not bTerminated do
+  begin
+    ReadLn(sCMD);
+    case sCMD.ToUpper() of
+      'START': THorse.Listen(9000, @OnListen);
+      'STOP': THorse.StopListen;
+      'TERMINATE' : bTerminated := True;
+    end;
+  end;
+end.
+```
+
+## Advanced Daemon with Full Configuration
+
+```delphi
+program ProductionDaemon;
+
+{$APPTYPE CONSOLE}
+{$R *.res}
+
+uses
+  System.SysUtils,
+  System.Classes,
+  System.JSON,
+  Horse,
+  Horse.Jhonson,
+  Horse.CORS,
+  Horse.Logger,
+  Horse.Logger.Provider.Console;
+
+begin
+  // Configure logging
+  THorseLoggerManager.RegisterProvider(
+    THorseLoggerProviderConsole.New
+  );
+  THorse.Use(THorseLoggerManager.HorseCallback);
+  
+  // Enable CORS
+  THorse.Use(CORS);
+  
+  // Enable JSON parsing
+  THorse.Use(Jhonson);
+  
+  // Configure server
+  THorse.Port := 9000;
+  THorse.Host := '0.0.0.0';
+  THorse.MaxConnections := 1000;
+  
+  // Health check endpoint
+  THorse.Get('/health',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('{"status": "healthy", "type": "daemon"}');
+    end);
+  
+  // API endpoints
+  THorse.Get('/api/status',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    var
+      Status: TJSONObject;
+    begin
+      Status := TJSONObject.Create;
+      try
+        Status.AddPair('uptime', DateTimeToStr(Now));
+        Status.AddPair('port', THorse.Port.ToString);
+        Status.AddPair('host', THorse.Host);
+        Status.AddPair('running', TJSONBool.Create(THorse.IsRunning));
+        
+        Res.Send<TJSONObject>(Status);
+      finally
+        Status.Free;
+      end;
+    end);
+  
+  THorse.Get('/api/users',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('[{"id": 1, "name": "User 1"}, {"id": 2, "name": "User 2"}]');
+    end);
+  
+  // Start daemon
+  THorse.Listen(
+    procedure
+    begin
+      // Logged to syslog
+    end);
+end.
+```
+
+## Systemd Service Configuration
+
+### Create Service File
+
+Create `/etc/systemd/system/horse-api.service`:
+
+```ini
+[Unit]
+Description=Horse API Daemon
+After=network.target
+
+[Service]
+Type=forking
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/horse-api
+ExecStart=/opt/horse-api/daemon
+ExecStop=/bin/kill -TERM $MAINPID
+Restart=on-failure
+RestartSec=5s
+
+# Security settings
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/horse-api
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Logging
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=horse-api
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Service Management
+
+<Steps>
+  <Step title="Install Service">
+    ```bash
+    # Copy executable
+    sudo mkdir -p /opt/horse-api
+    sudo cp daemon /opt/horse-api/
+    sudo chmod +x /opt/horse-api/daemon
+    
+    # Create log directory
+    sudo mkdir -p /var/log/horse-api
+    sudo chown www-data:www-data /var/log/horse-api
+    
+    # Copy service file
+    sudo cp horse-api.service /etc/systemd/system/
+    ```
+  </Step>
+  
+  <Step title="Enable and Start Service">
+    ```bash
+    # Reload systemd
+    sudo systemctl daemon-reload
+    
+    # Enable service (start on boot)
+    sudo systemctl enable horse-api
+    
+    # Start service
+    sudo systemctl start horse-api
+    
+    # Check status
+    sudo systemctl status horse-api
+    ```
+  </Step>
+  
+  <Step title="Verify Service">
+    ```bash
+    # Check if running
+    curl http://localhost:9000/health
+    
+    # View logs
+    sudo journalctl -u horse-api -f
+    ```
+  </Step>
+</Steps>
+
+## Signal Handling
+
+The daemon provider automatically handles Unix signals:
+
+| Signal | Action |
+|--------|--------|
+| SIGTERM | Graceful shutdown |
+| SIGHUP | Reload configuration (logged) |
+| SIGCHLD | Ignored (child processes) |
+
+### Custom Signal Handlers
+
+```delphi
+uses
+  Posix.Signal,
+  Posix.SysTypes;
+
+var
+  CustomShutdown: Boolean;
+
+procedure HandleCustomSignal(SigNum: Integer); cdecl;
+begin
+  case SigNum of
+    SIGUSR1:
+      begin
+        // Custom signal handling
+        Writeln('Received SIGUSR1');
+      end;
+    SIGTERM:
+      begin
+        CustomShutdown := True;
+        THorse.StopListen;
+      end;
+  end;
+end;
+
+begin
+  // Register custom handler
+  Signal(SIGUSR1, TSignalHandler(@HandleCustomSignal));
+  
+  THorse.Get('/ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong');
+    end);
+  
+  THorse.Listen;
+end.
+```
+
+## Logging with Syslog
+
+Daemon provider uses syslog for system integration:
+
+```delphi
+uses
+  ThirdParty.Posix.Syslog;
+
+begin
+  // Open syslog connection
+  openlog('horse-api', LOG_PID or LOG_NDELAY, LOG_DAEMON);
+  
+  // Log messages (done automatically by provider)
+  Syslog(LOG_INFO, 'Server starting');
+  Syslog(LOG_ERR, 'Error occurred');
+  Syslog(LOG_NOTICE, 'Configuration reloaded');
+  
+  // Configure routes
+  THorse.Get('/test',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Syslog(LOG_INFO, 'Test endpoint accessed');
+      Res.Send('OK');
+    end);
+  
+  THorse.Listen;
+  
+  // Close syslog (done automatically)
+  closelog();
+end.
+```
+
+### View Syslog Messages
+
+```bash
+# View all logs
+sudo journalctl -u horse-api
+
+# Follow logs in real-time
+sudo journalctl -u horse-api -f
+
+# Filter by priority
+sudo journalctl -u horse-api -p err
+
+# View logs from today
+sudo journalctl -u horse-api --since today
+
+# Export logs
+sudo journalctl -u horse-api --since "2026-01-01" > logs.txt
+```
+
+## Process Management
+
+### Daemon Process Flow
+
+1. **Fork Process**: Create background process
+2. **Create Session**: Detach from terminal
+3. **Fork Again**: Ensure process is not session leader
+4. **Close Descriptors**: Close standard input/output/error
+5. **Set umask**: Configure file permissions
+6. **Change Directory**: Set working directory to `/`
+7. **Start Server**: Begin listening for requests
+
+### PID File Management
+
+```bash
+# Create PID file
+echo $$ > /var/run/horse-api.pid
+
+# Read PID
+PID=$(cat /var/run/horse-api.pid)
+
+# Send signals
+kill -TERM $PID  # Graceful shutdown
+kill -HUP $PID   # Reload configuration
+```
+
+## Configuration Management
+
+### Configuration File
+
+Create `/etc/horse-api/config.json`:
+
+```json
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 9000,
+    "maxConnections": 1000
+  },
+  "logging": {
+    "level": "info",
+    "facility": "daemon"
+  },
+  "security": {
+    "enableSSL": false,
+    "certFile": "/etc/horse-api/cert.pem",
+    "keyFile": "/etc/horse-api/key.pem"
+  }
+}
+```
+
+### Load Configuration
+
+```delphi
+uses
+  System.JSON,
+  System.IOUtils;
+
+var
+  ConfigFile: string;
+  ConfigJSON: TJSONObject;
+  ServerConfig: TJSONObject;
+
+begin
+  // Load configuration
+  ConfigFile := '/etc/horse-api/config.json';
+  
+  if TFile.Exists(ConfigFile) then
+  begin
+    ConfigJSON := TJSONObject.ParseJSONValue(
+      TFile.ReadAllText(ConfigFile)
+    ) as TJSONObject;
+    try
+      ServerConfig := ConfigJSON.GetValue('server') as TJSONObject;
+      
+      THorse.Port := ServerConfig.GetValue<Integer>('port');
+      THorse.Host := ServerConfig.GetValue<string>('host');
+      THorse.MaxConnections := ServerConfig.GetValue<Integer>('maxConnections');
+    finally
+      ConfigJSON.Free;
+    end;
+  end;
+  
+  // Configure routes
+  THorse.Get('/ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong');
+    end);
+  
+  THorse.Listen;
+end.
+```
+
+## SSL/TLS Configuration
+
+```delphi
+uses
+  Horse,
+  IdSSLOpenSSL;
+
+begin
+  // Configure SSL
+  THorse.IOHandleSSL
+    .CertFile('/etc/horse-api/cert.pem')
+    .KeyFile('/etc/horse-api/key.pem')
+    .SSLVersions([sslvTLSv1_2, sslvTLSv1_3])
+    .Active(True);
+  
+  THorse.Get('/secure',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('Secure connection');
+    end);
+  
+  THorse.Listen(443);
+end.
+```
+
+See [SSL/TLS Configuration](/deployment/ssl) for detailed SSL setup.
+
+## Monitoring and Health Checks
+
+### Health Check Endpoint
+
+```delphi
+THorse.Get('/health',
+  procedure(Req: THorseRequest; Res: THorseResponse)
+  var
+    Health: TJSONObject;
+  begin
+    Health := TJSONObject.Create;
+    try
+      Health.AddPair('status', 'healthy');
+      Health.AddPair('timestamp', DateTimeToStr(Now));
+      Health.AddPair('uptime', IntToStr(GetTickCount div 1000) + 's');
+      
+      Res.Send<TJSONObject>(Health);
+    finally
+      Health.Free;
+    end;
+  end);
+```
+
+### Monitoring with systemd
+
+```bash
+# Check service status
+systemctl status horse-api
+
+# Check if service is active
+systemctl is-active horse-api
+
+# View failed services
+systemctl --failed
+
+# Restart on failure
+sudo systemctl restart horse-api
+```
+
+## Troubleshooting
+
+### Service Won't Start
+
+<Steps>
+  <Step title="Check Logs">
+    ```bash
+    sudo journalctl -u horse-api -n 50
+    sudo journalctl -xe
+    ```
+  </Step>
+  
+  <Step title="Verify Permissions">
+    ```bash
+    ls -la /opt/horse-api/daemon
+    sudo -u www-data /opt/horse-api/daemon  # Test as service user
+    ```
+  </Step>
+  
+  <Step title="Check Port Availability">
+    ```bash
+    sudo netstat -tuln | grep 9000
+    sudo lsof -i :9000
+    ```
+  </Step>
+  
+  <Step title="Test Manually">
+    ```bash
+    # Run without daemon mode for debugging
+    /opt/horse-api/daemon
+    ```
+  </Step>
+</Steps>
+
+### Port Permission Denied
+
+```bash
+# For ports < 1024, use capability instead of root
+sudo setcap 'cap_net_bind_service=+ep' /opt/horse-api/daemon
+
+# Or use port forwarding
+sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 9000
+```
+
+### Memory Leaks
+
+```delphi
+{$IFDEF DEBUG}
+ReportMemoryLeaksOnShutdown := True;
+{$ENDIF}
+```
+
+## Security Best Practices
+
+<Warning>
+Always run daemons with minimal privileges:
+</Warning>
+
+```ini
+[Service]
+# Run as non-root user
+User=www-data
+Group=www-data
+
+# Security hardening
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Restrict capabilities
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="SSL Configuration" icon="lock" href="/deployment/ssl">
+    Secure your daemon with HTTPS
+  </Card>
+  <Card title="Console Deployment" icon="terminal" href="/deployment/console">
+    Standard console application deployment
+  </Card>
+</CardGroup>

@@ -1,0 +1,529 @@
+---
+title: ISAPI Deployment
+description: Deploy Horse as an ISAPI extension for Internet Information Services (IIS)
+---
+
+## Overview
+
+ISAPI (Internet Server Application Programming Interface) deployment allows you to run Horse applications as native IIS extensions. This provides deep integration with Microsoft's web server infrastructure, including IIS's process management, security, and performance features.
+
+<Note>
+ISAPI deployment is Windows-only and requires the `HORSE_ISAPI` conditional define. The project must be compiled as a DLL library.
+</Note>
+
+## When to Use ISAPI Deployment
+
+- **Windows Server Environments**: Native IIS integration on Windows Server
+- **Enterprise Applications**: Leverage existing IIS infrastructure and management
+- **ASP.NET Integration**: Run alongside ASP.NET applications
+- **Windows Authentication**: Use integrated Windows authentication
+- **High Performance**: Direct integration with IIS worker processes
+- **Shared Hosting**: Multiple applications on single IIS instance
+
+## Required Conditional Define
+
+<Warning>
+You **must** add `HORSE_ISAPI` to your project's conditional defines and compile as a library.
+</Warning>
+
+<Steps>
+  <Step title="Open Project Options">
+    Go to **Project → Options → Delphi Compiler → Compiling**
+  </Step>
+  
+  <Step title="Add Conditional Define">
+    In the "Conditional defines" field, add: `HORSE_ISAPI`
+  </Step>
+  
+  <Step title="Change Project Type to Library">
+    Ensure your project starts with `library` (not `program`)
+  </Step>
+  
+  <Step title="Rebuild Project">
+    Clean and rebuild your project completely
+  </Step>
+</Steps>
+
+## Complete ISAPI Example
+
+```delphi
+library ISAPI;
+
+{$R *.res}
+
+uses Horse;
+
+begin
+  // Need to set "HORSE_ISAPI" compilation directive
+
+  THorse.Get('/ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong');
+    end);
+
+  THorse.Listen;
+end.
+```
+
+## Advanced ISAPI Application
+
+```delphi
+library MyISAPIApp;
+
+{$R *.res}
+
+uses
+  System.SysUtils,
+  System.Classes,
+  System.JSON,
+  Horse,
+  Horse.Jhonson, // JSON middleware
+  Horse.CORS;     // CORS support
+
+begin
+  // Enable CORS for cross-origin requests
+  THorse.Use(CORS);
+  
+  // Enable JSON parsing
+  THorse.Use(Jhonson);
+
+  // Health check endpoint
+  THorse.Get('/health',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('{"status": "healthy", "server": "IIS/ISAPI"}');
+    end);
+
+  // API endpoints
+  THorse.Get('/api/users',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    var
+      Users: TJSONArray;
+      User: TJSONObject;
+    begin
+      Users := TJSONArray.Create;
+      try
+        User := TJSONObject.Create;
+        User.AddPair('id', '1');
+        User.AddPair('name', 'John Doe');
+        Users.AddElement(User);
+        
+        User := TJSONObject.Create;
+        User.AddPair('id', '2');
+        User.AddPair('name', 'Jane Smith');
+        Users.AddElement(User);
+        
+        Res.Send<TJSONArray>(Users);
+      finally
+        Users.Free;
+      end;
+    end);
+
+  THorse.Get('/api/users/:id',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    var
+      UserId: string;
+      User: TJSONObject;
+    begin
+      UserId := Req.Params['id'];
+      
+      User := TJSONObject.Create;
+      try
+        User.AddPair('id', UserId);
+        User.AddPair('name', 'User ' + UserId);
+        User.AddPair('email', Format('user%s@example.com', [UserId]));
+        
+        Res.Send<TJSONObject>(User);
+      finally
+        User.Free;
+      end;
+    end);
+
+  THorse.Post('/api/users',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    var
+      Body: TJSONObject;
+      Response: TJSONObject;
+    begin
+      Body := Req.Body<TJSONObject>;
+      
+      Response := TJSONObject.Create;
+      try
+        Response.AddPair('id', '3');
+        Response.AddPair('name', Body.GetValue('name').Value);
+        Response.AddPair('created', 'true');
+        
+        Res.Status(201).Send<TJSONObject>(Response);
+      finally
+        Response.Free;
+      end;
+    end);
+
+  // Error handling
+  THorse.Get('/api/error',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      raise Exception.Create('Test error');
+    end);
+
+  THorse.Listen;
+end.
+```
+
+## IIS Configuration
+
+### Step-by-Step Setup
+
+<Steps>
+  <Step title="Enable ISAPI Extensions">
+    Open **Server Manager** → **Manage** → **Add Roles and Features**
+    
+    Navigate to: **Web Server (IIS)** → **Web Server** → **Application Development**
+    
+    Check:
+    - ✅ ISAPI Extensions
+    - ✅ ISAPI Filters
+  </Step>
+  
+  <Step title="Copy DLL to Web Directory">
+    Copy your compiled `ISAPI.dll` to your IIS website directory:
+    ```powershell
+    copy ISAPI.dll "C:\inetpub\wwwroot\api\"
+    ```
+  </Step>
+  
+  <Step title="Configure ISAPI Restrictions">
+    Open **IIS Manager** → Select Server → **ISAPI and CGI Restrictions**
+    
+    Click **Add** and configure:
+    - **Path**: `C:\inetpub\wwwroot\api\ISAPI.dll`
+    - **Description**: Horse API
+    - ✅ Allow extension path to execute
+  </Step>
+  
+  <Step title="Create Application or Virtual Directory">
+    Right-click on your website → **Add Application** or **Add Virtual Directory**
+    
+    Configure:
+    - **Alias**: `api`
+    - **Physical path**: `C:\inetpub\wwwroot\api`
+    - **Application pool**: Select or create pool
+  </Step>
+  
+  <Step title="Add Handler Mapping">
+    Select your application → **Handler Mappings** → **Add Script Map**
+    
+    Configure:
+    - **Request path**: `*`
+    - **Executable**: `C:\inetpub\wwwroot\api\ISAPI.dll`
+    - **Name**: `Horse_ISAPI`
+  </Step>
+  
+  <Step title="Test the Application">
+    Navigate to: `http://localhost/api/ping`
+  </Step>
+</Steps>
+
+### Web.config Configuration
+
+Create a `web.config` file in your application directory:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <system.webServer>
+    <handlers>
+      <add name="Horse_ISAPI" 
+           path="*" 
+           verb="*" 
+           modules="IsapiModule" 
+           scriptProcessor="C:\inetpub\wwwroot\api\ISAPI.dll" 
+           resourceType="Unspecified" 
+           requireAccess="Execute" 
+           preCondition="bitness64" />
+    </handlers>
+    
+    <!-- Enable detailed errors for debugging -->
+    <httpErrors errorMode="Detailed" />
+    
+    <!-- Increase request limits if needed -->
+    <security>
+      <requestFiltering>
+        <requestLimits maxAllowedContentLength="52428800" />
+      </requestFiltering>
+    </security>
+    
+    <!-- Default document -->
+    <defaultDocument enabled="false" />
+    
+    <!-- URL Rewrite (if module installed) -->
+    <rewrite>
+      <rules>
+        <rule name="Horse API" stopProcessing="true">
+          <match url="^api/(.*)" />
+          <action type="Rewrite" url="ISAPI.dll/{R:1}" />
+        </rule>
+      </rules>
+    </rewrite>
+  </system.webServer>
+</configuration>
+```
+
+## Application Pool Configuration
+
+### Recommended Settings
+
+<Steps>
+  <Step title="Create Dedicated Application Pool">
+    Open **IIS Manager** → **Application Pools** → **Add Application Pool**
+    
+    Configure:
+    - **Name**: `HorseAPI`
+    - **.NET CLR version**: No Managed Code
+    - **Managed pipeline mode**: Integrated
+  </Step>
+  
+  <Step title="Configure Advanced Settings">
+    Right-click pool → **Advanced Settings**
+    
+    Key settings:
+    ```text
+    General:
+      .NET CLR Version: No Managed Code
+      Enable 32-Bit Applications: False (for 64-bit DLL)
+    
+    Process Model:
+      Identity: ApplicationPoolIdentity
+      Idle Time-out: 20 minutes
+      Maximum Worker Processes: 1 (or more for web garden)
+    
+    Recycling:
+      Regular Time Interval: 1740 (29 hours)
+      Generate Recycle Event Log Entry: True
+    ```
+  </Step>
+  
+  <Step title="Set Application Pool">
+    Select your application → **Basic Settings** → Choose your pool
+  </Step>
+</Steps>
+
+## Security Configuration
+
+### Authentication
+
+```xml
+<configuration>
+  <system.webServer>
+    <security>
+      <authentication>
+        <!-- Anonymous authentication -->
+        <anonymousAuthentication enabled="true" />
+        
+        <!-- Windows authentication -->
+        <windowsAuthentication enabled="false" />
+        
+        <!-- Basic authentication -->
+        <basicAuthentication enabled="false" />
+      </authentication>
+    </security>
+  </system.webServer>
+</configuration>
+```
+
+### SSL/TLS Configuration
+
+<Note>
+For ISAPI applications, SSL is typically configured at the IIS level, not in the application code.
+</Note>
+
+<Steps>
+  <Step title="Install SSL Certificate">
+    **IIS Manager** → Server → **Server Certificates** → **Import** or **Create Self-Signed Certificate**
+  </Step>
+  
+  <Step title="Add HTTPS Binding">
+    Select your site → **Bindings** → **Add**
+    
+    Configure:
+    - **Type**: https
+    - **Port**: 443
+    - **SSL certificate**: Select your certificate
+  </Step>
+  
+  <Step title="Require SSL (Optional)">
+    Select your application → **SSL Settings**
+    
+    Configure:
+    - ✅ Require SSL
+    - Client certificates: Accept or Ignore
+  </Step>
+</Steps>
+
+### Force HTTPS Redirect
+
+```xml
+<configuration>
+  <system.webServer>
+    <rewrite>
+      <rules>
+        <rule name="Redirect to HTTPS" stopProcessing="true">
+          <match url="(.*)" />
+          <conditions>
+            <add input="{HTTPS}" pattern="off" ignoreCase="true" />
+          </conditions>
+          <action type="Redirect" url="https://{HTTP_HOST}/{R:1}" 
+                  redirectType="Permanent" />
+        </rule>
+      </rules>
+    </rewrite>
+  </system.webServer>
+</configuration>
+```
+
+## Debugging
+
+### Enable Detailed Errors
+
+```xml
+<configuration>
+  <system.webServer>
+    <httpErrors errorMode="Detailed" />
+  </system.webServer>
+  <system.web>
+    <customErrors mode="Off" />
+  </system.web>
+</configuration>
+```
+
+### Failed Request Tracing
+
+<Steps>
+  <Step title="Enable Tracing">
+    **IIS Manager** → Site → **Failed Request Tracing** → **Enable**
+  </Step>
+  
+  <Step title="Add Tracing Rule">
+    **Failed Request Tracing Rules** → **Add**
+    
+    Configure to trace:
+    - All content (*)
+    - Status codes: 400-999
+    - Time taken > 30 seconds
+  </Step>
+</Steps>
+
+## Performance Optimization
+
+### Output Caching
+
+```xml
+<configuration>
+  <system.webServer>
+    <caching>
+      <profiles>
+        <add extension=".dll" 
+             policy="DontCache" 
+             kernelCachePolicy="DontCache" />
+      </profiles>
+    </caching>
+  </system.webServer>
+</configuration>
+```
+
+### Compression
+
+```xml
+<configuration>
+  <system.webServer>
+    <httpCompression>
+      <dynamicTypes>
+        <add mimeType="application/json" enabled="true" />
+        <add mimeType="application/xml" enabled="true" />
+      </dynamicTypes>
+    </httpCompression>
+  </system.webServer>
+</configuration>
+```
+
+## Troubleshooting
+
+### Common Issues
+
+<Warning>
+**HTTP Error 500.0 - Internal Server Error**
+- Missing `HORSE_ISAPI` conditional define
+- DLL compiled for wrong architecture (32/64-bit)
+- Missing dependencies or runtime packages
+</Warning>
+
+<Warning>
+**HTTP Error 404.2 - ISAPI and CGI Restrictions**
+- ISAPI extension not allowed in IIS
+- Add DLL to ISAPI restrictions list
+</Warning>
+
+<Warning>
+**Handler Mapping Error**
+- Incorrect path to DLL in handler mapping
+- Check file permissions on DLL
+</Warning>
+
+### Check Event Logs
+
+```powershell
+# View IIS logs
+Get-EventLog -LogName Application -Source "IIS*" -Newest 20
+
+# View System logs
+Get-EventLog -LogName System -Source "IIS*" -Newest 20
+```
+
+### Test DLL Registration
+
+```powershell
+# Register ISAPI DLL manually (rarely needed)
+regsvr32 "C:\inetpub\wwwroot\api\ISAPI.dll"
+
+# Check file permissions
+icacls "C:\inetpub\wwwroot\api\ISAPI.dll"
+```
+
+## Deployment Checklist
+
+<Steps>
+  <Step title="Build Configuration">
+    ✅ `HORSE_ISAPI` conditional define set  
+    ✅ Compiled as library (not program)  
+    ✅ Release configuration  
+    ✅ Correct architecture (32/64-bit)  
+    ✅ All dependencies included  
+  </Step>
+  
+  <Step title="IIS Configuration">
+    ✅ ISAPI Extensions enabled  
+    ✅ DLL in ISAPI restrictions  
+    ✅ Handler mapping configured  
+    ✅ Application pool created  
+    ✅ Permissions set correctly  
+  </Step>
+  
+  <Step title="Testing">
+    ✅ Health check endpoint responds  
+    ✅ API endpoints working  
+    ✅ Error handling functions  
+    ✅ SSL/HTTPS working (if configured)  
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Apache Module" icon="server" href="/deployment/apache">
+    Deploy with Apache HTTP Server
+  </Card>
+  <Card title="CGI Deployment" icon="gear" href="/deployment/cgi">
+    Standard CGI deployment option
+  </Card>
+</CardGroup>

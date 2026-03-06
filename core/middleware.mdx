@@ -1,0 +1,397 @@
+---
+title: Middleware
+description: Learn how to use middleware in Horse to intercept and process HTTP requests and responses
+---
+
+Middleware functions are executed in sequence before your route handlers. They have access to the request and response objects and can modify them, end the request-response cycle, or call the next middleware in the stack.
+
+## What is Middleware?
+
+Middleware is a callback function that executes before your route handler. It's perfect for:
+
+- Authentication and authorization
+- Logging and monitoring
+- Request validation
+- Response transformation
+- Error handling
+- CORS handling
+
+## Basic Usage
+
+Register middleware using the `Use()` method:
+
+```delphi
+THorse.Use(
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Writeln('Request received: ' + Req.PathInfo);
+    Next(); // Continue to next middleware or route handler
+  end);
+```
+
+## Use Method Signatures
+
+The `Use` method has multiple overloads defined in `Horse.Core.pas`:
+
+### Global Middleware
+
+Apply middleware to all routes:
+
+```delphi
+class function Use(const ACallback: THorseCallback): THorseCore;
+```
+
+**Example:**
+```delphi
+THorse.Use(
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Writeln(Format('[%s] %s', [DateTimeToStr(Now), Req.PathInfo]));
+    Next();
+  end);
+```
+
+### Path-Specific Middleware
+
+Apply middleware to specific paths:
+
+```delphi
+class function Use(const APath: string; 
+                   const ACallback: THorseCallback): THorseCore;
+```
+
+**Example:**
+```delphi
+THorse.Use('/api',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    // Only runs for routes starting with /api
+    Writeln('API request');
+    Next();
+  end);
+```
+
+### Multiple Middleware
+
+Register multiple middleware functions at once:
+
+```delphi
+class function Use(const ACallbacks: array of THorseCallback): THorseCore;
+class function Use(const APath: string; 
+                   const ACallbacks: array of THorseCallback): THorseCore;
+```
+
+**Example:**
+```delphi
+THorse.Use('/admin', [
+  AuthMiddleware,
+  LoggingMiddleware,
+  ValidationMiddleware
+]);
+```
+
+## The Next Procedure
+
+The `Next` parameter is crucial for middleware chaining. Call it to pass control to the next middleware or route handler:
+
+```delphi
+procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+begin
+  // Do something before
+  Writeln('Before');
+  
+  Next(); // Continue to next handler
+  
+  // Do something after
+  Writeln('After');
+end;
+```
+
+<Note>
+If you don't call `Next()`, the request-response cycle stops at that middleware, and subsequent middleware and route handlers won't execute.
+</Note>
+
+## Common Middleware Patterns
+
+### Logging Middleware
+
+```delphi
+procedure LoggingMiddleware(Req: THorseRequest; Res: THorseResponse; Next: TProc);
+begin
+  Writeln(Format('[%s] %s %s', [
+    DateTimeToStr(Now),
+    Req.MethodType.ToString,
+    Req.PathInfo
+  ]));
+  Next();
+end;
+
+// Register
+THorse.Use(LoggingMiddleware);
+```
+
+### Authentication Middleware
+
+```delphi
+procedure AuthMiddleware(Req: THorseRequest; Res: THorseResponse; Next: TProc);
+var
+  LToken: string;
+begin
+  LToken := Req.Headers['Authorization'];
+  
+  if LToken.IsEmpty then
+  begin
+    Res.Status(THTTPStatus.Unauthorized)
+       .Send('{"error": "No token provided"}');
+    Exit; // Stop here, don't call Next()
+  end;
+  
+  // Validate token
+  if not ValidateToken(LToken) then
+  begin
+    Res.Status(THTTPStatus.Forbidden)
+       .Send('{"error": "Invalid token"}');
+    Exit;
+  end;
+  
+  Next(); // Token is valid, continue
+end;
+
+// Apply to protected routes
+THorse.Use('/api/protected', AuthMiddleware);
+```
+
+### CORS Middleware
+
+```delphi
+procedure CORSMiddleware(Req: THorseRequest; Res: THorseResponse; Next: TProc);
+begin
+  Res.AddHeader('Access-Control-Allow-Origin', '*');
+  Res.AddHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  Res.AddHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
+  if Req.MethodType = TMethodType.mtHead then
+  begin
+    Res.Status(THTTPStatus.NoContent).Send('');
+    Exit;
+  end;
+  
+  Next();
+end;
+
+THorse.Use(CORSMiddleware);
+```
+
+### Request Validation Middleware
+
+```delphi
+procedure ValidateJSONMiddleware(Req: THorseRequest; Res: THorseResponse; Next: TProc);
+var
+  LContentType: string;
+begin
+  LContentType := Req.ContentType;
+  
+  if not LContentType.Contains('application/json') then
+  begin
+    Res.Status(THTTPStatus.BadRequest)
+       .Send('{"error": "Content-Type must be application/json"}');
+    Exit;
+  end;
+  
+  Next();
+end;
+
+// Apply to POST/PUT routes
+THorse.Use([ValidateJSONMiddleware]);
+```
+
+## Middleware Execution Order
+
+Middleware executes in the order it's registered:
+
+```delphi
+THorse.Use(
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Writeln('First middleware');
+    Next();
+  end);
+
+THorse.Use(
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Writeln('Second middleware');
+    Next();
+  end);
+
+THorse.Get('/test',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Writeln('Route handler');
+    Res.Send('Done');
+  end);
+
+// Output:
+// First middleware
+// Second middleware
+// Route handler
+```
+
+## Path Matching
+
+Path-specific middleware matches routes that start with the specified path:
+
+```delphi
+// Matches /api/users, /api/posts, /api/anything
+THorse.Use('/api', APIMiddleware);
+
+// Matches /admin/users, /admin/settings, etc.
+THorse.Use('/admin', AdminMiddleware);
+
+// Multiple paths
+THorse.Use('/api/users', [AuthMiddleware, RateLimitMiddleware]);
+```
+
+## Complete Example
+
+```delphi
+program MiddlewareExample;
+
+uses
+  Horse,
+  System.SysUtils,
+  System.JSON;
+
+// Define middleware procedures
+procedure LogRequest(Req: THorseRequest; Res: THorseResponse; Next: TProc);
+begin
+  Writeln(Format('[%s] %s %s', [
+    FormatDateTime('yyyy-mm-dd hh:nn:ss', Now),
+    Req.MethodType.ToString,
+    Req.PathInfo
+  ]));
+  Next();
+end;
+
+procedure CheckAuth(Req: THorseRequest; Res: THorseResponse; Next: TProc);
+var
+  LToken: string;
+begin
+  LToken := Req.Headers['Authorization'];
+  
+  if LToken <> 'secret-token' then
+  begin
+    Res.Status(THTTPStatus.Unauthorized)
+       .Send('{"error": "Unauthorized"}');
+    Exit;
+  end;
+  
+  Writeln('Authentication successful');
+  Next();
+end;
+
+procedure AddResponseTime(Req: THorseRequest; Res: THorseResponse; Next: TProc);
+var
+  LStartTime: TDateTime;
+begin
+  LStartTime := Now;
+  
+  Next(); // Execute route handler
+  
+  // After route handler completes
+  Res.AddHeader('X-Response-Time', 
+    FormatFloat('0.000', MilliSecondsBetween(Now, LStartTime)) + 'ms');
+end;
+
+begin
+  // Global middleware - runs for all routes
+  THorse.Use(LogRequest);
+  THorse.Use(AddResponseTime);
+  
+  // Public route - no auth required
+  THorse.Get('/public',
+    procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+    begin
+      Res.Send('{"message": "Public endpoint"}');
+    end);
+  
+  // Protected routes - auth required
+  THorse.Use('/api', CheckAuth);
+  
+  THorse.Get('/api/users',
+    procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+    var
+      LUsers: TJSONArray;
+    begin
+      LUsers := TJSONArray.Create;
+      try
+        LUsers.Add(TJSONObject.Create.AddPair('id', '1').AddPair('name', 'John'));
+        LUsers.Add(TJSONObject.Create.AddPair('id', '2').AddPair('name', 'Jane'));
+        Res.Send(LUsers.ToString);
+      finally
+        LUsers.Free;
+      end;
+    end);
+  
+  THorse.Get('/api/profile',
+    procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+    begin
+      Res.Send('{"name": "John Doe", "email": "john@example.com"}');
+    end);
+  
+  THorse.Listen(9000,
+    procedure
+    begin
+      Writeln('Server running on port 9000');
+      Writeln('Try:');
+      Writeln('  GET http://localhost:9000/public');
+      Writeln('  GET http://localhost:9000/api/users (requires Authorization header)');
+    end);
+end.
+```
+
+## Internal Implementation
+
+Middleware is registered through `RegisterMiddleware` in the router tree (`Horse.Core.pas:396-402`):
+
+```delphi
+class function THorseCore.Use(const APath: string; 
+                              const ACallback: THorseCallback): THorseCore;
+begin
+  Result := GetInstance;
+  Result.Routes.RegisterMiddleware(TrimPath(APath), ACallback);
+end;
+```
+
+Paths are normalized with `TrimPath` to ensure consistent matching:
+
+```delphi
+class function THorseCore.TrimPath(const APath: string): string;
+begin
+  Result := '/' + APath.Trim(['/']);
+end;
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Always call Next()">
+    Unless you're intentionally ending the request cycle (e.g., sending an error response), always call `Next()` to continue processing.
+  </Step>
+  
+  <Step title="Order matters">
+    Register middleware in the order you want them to execute. Global middleware should be registered before route-specific middleware.
+  </Step>
+  
+  <Step title="Keep middleware focused">
+    Each middleware function should do one thing well. Compose multiple middleware functions for complex workflows.
+  </Step>
+  
+  <Step title="Handle errors gracefully">
+    Use try-except blocks in middleware to catch and handle errors without crashing the server.
+  </Step>
+  
+  <Step title="Use path-specific middleware">
+    Apply middleware only to routes that need it to improve performance.
+  </Step>
+</Steps>

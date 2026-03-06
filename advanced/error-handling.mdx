@@ -1,0 +1,619 @@
+---
+title: Error Handling
+description: Comprehensive guide to handling errors and exceptions in Horse applications
+---
+
+# Error Handling
+
+Proper error handling is crucial for building robust and reliable web applications. Horse provides a structured approach to handling exceptions and errors through specialized exception classes and middleware patterns.
+
+## Exception Types
+
+Horse provides two primary exception types for controlling application flow and error responses.
+
+### EHorseException
+
+`EHorseException` is the main exception class for handling HTTP errors with detailed context and structured error responses.
+
+#### Basic Usage
+
+```delphi
+uses
+  Horse, Horse.Exception;
+
+THorse.Get('/users/:id',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LUserId: Integer;
+  begin
+    LUserId := StrToIntDef(Req.Params['id'], -1);
+    
+    if LUserId <= 0 then
+      raise EHorseException.New
+        .Error('Invalid user ID')
+        .Status(THTTPStatus.BadRequest);
+    
+    // Continue processing...
+  end);
+```
+
+#### Creating Detailed Exceptions
+
+```delphi
+raise EHorseException.New
+  .Error('User not found')
+  .Status(THTTPStatus.NotFound)
+  .Title('Resource Not Found')
+  .Detail('The requested user does not exist in the database')
+  .Code(1001)
+  .&Type(TMessageType.Error)
+  .Hint('Please verify the user ID and try again')
+  .&Unit('UserController');
+```
+
+<Note>
+The `&` prefix on `Type` and `Unit` is required because these are reserved words in Delphi. This is a special syntax that allows using reserved words as identifiers.
+</Note>
+
+#### Exception Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Error` | string | Main error message |
+| `Status` | THTTPStatus | HTTP status code |
+| `Title` | string | Error title for structured responses |
+| `Detail` | string | Detailed error description |
+| `Code` | Integer | Application-specific error code |
+| `Type` | TMessageType | Message type (Error, Warning, Information) |
+| `Hint` | string | Suggestion for resolving the error |
+| `Unit` | string | Source unit/module where error occurred |
+
+#### JSON Error Response
+
+`EHorseException` can automatically generate JSON error responses:
+
+```delphi
+var
+  LException: EHorseException;
+  LJson: string;
+begin
+  LException := EHorseException.New
+    .Error('Validation failed')
+    .Status(THTTPStatus.BadRequest)
+    .Title('Invalid Input')
+    .Code(4001)
+    .Hint('Check your input parameters');
+  
+  LJson := LException.ToJSON;
+  // Returns:
+  // {
+  //   "title": "Invalid Input",
+  //   "code": 4001,
+  //   "error": "Validation failed",
+  //   "hint": "Check your input parameters"
+  // }
+end;
+```
+
+### EHorseCallbackInterrupted
+
+`EHorseCallbackInterrupted` is used to interrupt the request processing chain without triggering error handlers. This is useful for early exits in middleware or when you've already sent a response.
+
+```delphi
+uses
+  Horse, Horse.Exception.Interrupted;
+
+procedure AuthMiddleware(Req: THorseRequest; Res: THorseResponse; Next: TNextProc);
+var
+  LToken: string;
+begin
+  LToken := Req.Headers['Authorization'];
+  
+  if LToken = '' then
+  begin
+    Res.Status(THTTPStatus.Unauthorized).Send('Missing authorization token');
+    raise EHorseCallbackInterrupted.Create; // Stop processing, don't call Next()
+  end;
+  
+  if not ValidateToken(LToken) then
+  begin
+    Res.Status(THTTPStatus.Forbidden).Send('Invalid token');
+    raise EHorseCallbackInterrupted.Create('Token validation failed');
+  end;
+  
+  Next(); // Continue to next handler
+end;
+```
+
+<Warning>
+Always send a response before raising `EHorseCallbackInterrupted`. This exception interrupts the chain but doesn't automatically send any response to the client.
+</Warning>
+
+#### When to Use EHorseCallbackInterrupted
+
+- **Authentication/Authorization failures**: When you've already sent an auth error response
+- **Early validation exits**: When validation fails in middleware
+- **Rate limiting**: When request quota is exceeded
+- **Conditional processing**: When certain conditions prevent further processing
+
+## Error Handling Patterns
+
+### Try-Except in Routes
+
+The most basic error handling approach:
+
+```delphi
+THorse.Post('/users',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LUser: TUser;
+  begin
+    try
+      LUser := TUser.Create;
+      try
+        LUser.Name := Req.Body<TJSONObject>.GetValue<string>('name');
+        LUser.Email := Req.Body<TJSONObject>.GetValue<string>('email');
+        
+        if not LUser.Validate then
+          raise EHorseException.New
+            .Error('Validation failed')
+            .Status(THTTPStatus.BadRequest);
+        
+        LUser.Save;
+        Res.Status(THTTPStatus.Created).Send('User created');
+      finally
+        LUser.Free;
+      end;
+    except
+      on E: EHorseException do
+        Res.Status(E.Status).Send(E.ToJSON);
+      on E: Exception do
+        Res.Status(THTTPStatus.InternalServerError)
+           .Send('Internal error: ' + E.Message);
+    end;
+  end);
+```
+
+### Global Error Handler Middleware
+
+Create centralized error handling:
+
+```delphi
+procedure ErrorHandlerMiddleware(Req: THorseRequest; Res: THorseResponse; Next: TNextProc);
+begin
+  try
+    Next(); // Call next handler in chain
+  except
+    on E: EHorseException do
+    begin
+      Res.Status(E.Status)
+         .ContentType('application/json')
+         .Send(E.ToJSON);
+    end;
+    on E: EHorseCallbackInterrupted do
+    begin
+      // Request was interrupted intentionally, do nothing
+      // Response should already be sent
+    end;
+    on E: Exception do
+    begin
+      // Log unexpected errors
+      LogError(E.Message, E.StackTrace);
+      
+      Res.Status(THTTPStatus.InternalServerError)
+         .Send('An unexpected error occurred');
+    end;
+  end;
+end;
+
+begin
+  // Apply error handler as first middleware
+  THorse.Use(ErrorHandlerMiddleware);
+  
+  // Define routes...
+  
+  THorse.Listen(9000);
+end.
+```
+
+<Tip>
+Place your error handler middleware first in the chain so it can wrap all subsequent handlers and catch any exceptions they raise.
+</Tip>
+
+### Validation Helper Pattern
+
+<Accordion title="Complete Validation Helper Example">
+
+```delphi
+unit MyApp.Validation;
+
+interface
+
+uses
+  System.SysUtils, System.JSON, Horse, Horse.Exception;
+
+type
+  TValidator = class
+  public
+    class procedure RequireField(AJson: TJSONObject; const AFieldName: string);
+    class procedure RequireEmail(const AEmail: string);
+    class procedure RequireMinLength(const AValue: string; AMinLength: Integer; const AFieldName: string);
+    class procedure RequirePositive(AValue: Integer; const AFieldName: string);
+    class procedure RequireInRange(AValue: Integer; AMin, AMax: Integer; const AFieldName: string);
+  end;
+
+implementation
+
+class procedure TValidator.RequireField(AJson: TJSONObject; const AFieldName: string);
+begin
+  if not Assigned(AJson.GetValue(AFieldName)) then
+    raise EHorseException.New
+      .Error(Format('Field "%s" is required', [AFieldName]))
+      .Status(THTTPStatus.BadRequest)
+      .Title('Missing Required Field')
+      .Code(4001);
+end;
+
+class procedure TValidator.RequireEmail(const AEmail: string);
+begin
+  if not AEmail.Contains('@') then
+    raise EHorseException.New
+      .Error('Invalid email address')
+      .Status(THTTPStatus.BadRequest)
+      .Title('Validation Error')
+      .Detail(Format('The email "%s" is not valid', [AEmail]))
+      .Hint('Email must contain @ symbol')
+      .Code(4002);
+end;
+
+class procedure TValidator.RequireMinLength(const AValue: string; AMinLength: Integer; const AFieldName: string);
+begin
+  if Length(AValue) < AMinLength then
+    raise EHorseException.New
+      .Error(Format('%s must be at least %d characters', [AFieldName, AMinLength]))
+      .Status(THTTPStatus.BadRequest)
+      .Code(4003);
+end;
+
+class procedure TValidator.RequirePositive(AValue: Integer; const AFieldName: string);
+begin
+  if AValue <= 0 then
+    raise EHorseException.New
+      .Error(Format('%s must be a positive number', [AFieldName]))
+      .Status(THTTPStatus.BadRequest)
+      .Code(4004);
+end;
+
+class procedure TValidator.RequireInRange(AValue: Integer; AMin, AMax: Integer; const AFieldName: string);
+begin
+  if (AValue < AMin) or (AValue > AMax) then
+    raise EHorseException.New
+      .Error(Format('%s must be between %d and %d', [AFieldName, AMin, AMax]))
+      .Status(THTTPStatus.BadRequest)
+      .Code(4005);
+end;
+
+end.
+```
+
+Usage:
+
+```delphi
+THorse.Post('/api/users',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LJson: TJSONObject;
+    LName, LEmail: string;
+    LAge: Integer;
+  begin
+    LJson := Req.Body<TJSONObject>;
+    
+    // Validate required fields
+    TValidator.RequireField(LJson, 'name');
+    TValidator.RequireField(LJson, 'email');
+    TValidator.RequireField(LJson, 'age');
+    
+    LName := LJson.GetValue<string>('name');
+    LEmail := LJson.GetValue<string>('email');
+    LAge := LJson.GetValue<Integer>('age');
+    
+    // Validate field values
+    TValidator.RequireMinLength(LName, 3, 'Name');
+    TValidator.RequireEmail(LEmail);
+    TValidator.RequireInRange(LAge, 18, 120, 'Age');
+    
+    // All validations passed, create user
+    CreateUser(LName, LEmail, LAge);
+    Res.Status(THTTPStatus.Created).Send('User created');
+  end);
+```
+
+</Accordion>
+
+## HTTP Status Codes
+
+Horse provides comprehensive HTTP status code support through the `THTTPStatus` enum:
+
+### Common Status Codes
+
+```delphi
+// Success
+Res.Status(THTTPStatus.OK);                    // 200
+Res.Status(THTTPStatus.Created);               // 201
+Res.Status(THTTPStatus.NoContent);             // 204
+
+// Redirection
+Res.Status(THTTPStatus.MovedPermanently);      // 301
+Res.Status(THTTPStatus.Found);                 // 302
+Res.Status(THTTPStatus.SeeOther);              // 303
+
+// Client Errors
+Res.Status(THTTPStatus.BadRequest);            // 400
+Res.Status(THTTPStatus.Unauthorized);          // 401
+Res.Status(THTTPStatus.Forbidden);             // 403
+Res.Status(THTTPStatus.NotFound);              // 404
+Res.Status(THTTPStatus.MethodNotAllowed);      // 405
+Res.Status(THTTPStatus.Conflict);              // 409
+Res.Status(THTTPStatus.UnprocessableEntity);   // 422
+Res.Status(THTTPStatus.TooManyRequests);       // 429
+
+// Server Errors
+Res.Status(THTTPStatus.InternalServerError);   // 500
+Res.Status(THTTPStatus.NotImplemented);        // 501
+Res.Status(THTTPStatus.ServiceUnavailable);    // 503
+```
+
+### Status Code Best Practices
+
+<Steps>
+
+<Step title="Use appropriate status codes">
+  Choose status codes that accurately represent the response:
+  - **2xx**: Success
+  - **3xx**: Redirection
+  - **4xx**: Client errors (user's fault)
+  - **5xx**: Server errors (server's fault)
+</Step>
+
+<Step title="Be consistent">
+  Use the same status codes for similar situations across your API.
+</Step>
+
+<Step title="Include error details">
+  Don't just send a status code - include a descriptive error message.
+</Step>
+
+</Steps>
+
+## Advanced Error Handling
+
+### Custom Error Response Format
+
+```delphi
+type
+  TErrorResponse = record
+    Success: Boolean;
+    ErrorCode: Integer;
+    Message: string;
+    Timestamp: TDateTime;
+    Path: string;
+    class function Create(ACode: Integer; const AMessage, APath: string): TErrorResponse; static;
+    function ToJSON: string;
+  end;
+
+class function TErrorResponse.Create(ACode: Integer; const AMessage, APath: string): TErrorResponse;
+begin
+  Result.Success := False;
+  Result.ErrorCode := ACode;
+  Result.Message := AMessage;
+  Result.Timestamp := Now;
+  Result.Path := APath;
+end;
+
+function TErrorResponse.ToJSON: string;
+var
+  LJson: TJSONObject;
+begin
+  LJson := TJSONObject.Create;
+  try
+    LJson.AddPair('success', TJSONBool.Create(Success));
+    LJson.AddPair('errorCode', TJSONNumber.Create(ErrorCode));
+    LJson.AddPair('message', Message);
+    LJson.AddPair('timestamp', DateTimeToStr(Timestamp));
+    LJson.AddPair('path', Path);
+    Result := LJson.ToJSON;
+  finally
+    LJson.Free;
+  end;
+end;
+
+// Usage
+procedure ErrorMiddleware(Req: THorseRequest; Res: THorseResponse; Next: TNextProc);
+var
+  LError: TErrorResponse;
+begin
+  try
+    Next();
+  except
+    on E: EHorseException do
+    begin
+      LError := TErrorResponse.Create(
+        E.Code,
+        E.Error,
+        Req.PathInfo
+      );
+      Res.Status(E.Status)
+         .ContentType('application/json')
+         .Send(LError.ToJSON);
+    end;
+  end;
+end;
+```
+
+### Logging Errors
+
+```delphi
+uses
+  System.SysUtils, System.IOUtils;
+
+procedure LogError(const AMessage, AStackTrace: string);
+var
+  LLogFile: string;
+  LLogEntry: string;
+begin
+  LLogFile := TPath.Combine(TPath.GetDocumentsPath, 'app_errors.log');
+  LLogEntry := Format('[%s] ERROR: %s%s%s%s',
+    [FormatDateTime('yyyy-mm-dd hh:nn:ss', Now),
+     AMessage,
+     sLineBreak,
+     AStackTrace,
+     sLineBreak + sLineBreak]);
+  
+  TFile.AppendAllText(LLogFile, LLogEntry, TEncoding.UTF8);
+end;
+
+procedure ErrorLoggerMiddleware(Req: THorseRequest; Res: THorseResponse; Next: TNextProc);
+begin
+  try
+    Next();
+  except
+    on E: Exception do
+    begin
+      LogError(
+        Format('%s - %s %s', [E.ClassName, Req.MethodType.ToString, Req.PathInfo]),
+        E.Message
+      );
+      raise; // Re-raise to let other error handlers process it
+    end;
+  end;
+end;
+```
+
+### Database Transaction Rollback
+
+```delphi
+THorse.Post('/api/orders',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LConnection: TFDConnection;
+  begin
+    LConnection := GetDatabaseConnection;
+    
+    LConnection.StartTransaction;
+    try
+      // Perform database operations
+      CreateOrder(Req.Body<TJSONObject>);
+      UpdateInventory(Req.Body<TJSONObject>);
+      SendConfirmationEmail(Req.Body<TJSONObject>);
+      
+      LConnection.Commit;
+      Res.Status(THTTPStatus.Created).Send('Order created');
+    except
+      on E: Exception do
+      begin
+        LConnection.Rollback;
+        
+        if E is EHorseException then
+          raise
+        else
+          raise EHorseException.New
+            .Error('Failed to create order')
+            .Status(THTTPStatus.InternalServerError)
+            .Detail(E.Message);
+      end;
+    end;
+  end);
+```
+
+## Error Handling Best Practices
+
+<Steps>
+
+<Step title="Use specific exception types">
+  Use `EHorseException` for expected errors with proper status codes. Reserve generic exceptions for truly unexpected errors.
+</Step>
+
+<Step title="Provide helpful error messages">
+  Include enough context for clients to understand and fix the problem, but don't expose sensitive system details.
+</Step>
+
+<Step title="Log server errors">
+  Always log 5xx errors with full stack traces for debugging, but send sanitized messages to clients.
+</Step>
+
+<Step title="Handle resources properly">
+  Always use try-finally blocks to ensure resources (database connections, files, etc.) are properly cleaned up.
+</Step>
+
+<Step title="Don't catch everything">
+  Let unexpected exceptions bubble up to your global error handler. Don't hide errors by catching and ignoring them.
+</Step>
+
+</Steps>
+
+<Warning>
+**Security Notice**: Never expose sensitive information in error messages:
+- Database connection strings
+- File paths
+- Stack traces (in production)
+- Internal system details
+</Warning>
+
+## Testing Error Handlers
+
+```delphi
+// Test helper to simulate errors
+THorse.Get('/test/error/:type',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LErrorType: string;
+  begin
+    LErrorType := Req.Params['type'];
+    
+    case IndexStr(LErrorType, ['badrequest', 'notfound', 'servererror']) of
+      0: raise EHorseException.New
+           .Error('Bad request test')
+           .Status(THTTPStatus.BadRequest);
+      1: raise EHorseException.New
+           .Error('Not found test')
+           .Status(THTTPStatus.NotFound);
+      2: raise Exception.Create('Server error test');
+    else
+      Res.Send('Unknown error type');
+    end;
+  end);
+```
+
+## API Reference
+
+### EHorseException Methods
+
+| Method | Description |
+|--------|-------------|
+| `New` | Create a new exception instance |
+| `Error(value)` | Set error message |
+| `Status(value)` | Set HTTP status code |
+| `Title(value)` | Set error title |
+| `Detail(value)` | Set detailed description |
+| `Code(value)` | Set application error code |
+| `Type(value)` | Set message type |
+| `Hint(value)` | Set hint for resolution |
+| `Unit(value)` | Set source unit name |
+| `ToJSON` | Convert to JSON string |
+| `ToJSONObject` | Convert to TJSONObject |
+
+### EHorseCallbackInterrupted
+
+| Constructor | Description |
+|-------------|-------------|
+| `Create` | Create without message |
+| `Create(message)` | Create with custom message |
+
+---
+
+## Related Topics
+
+- [Middleware](/core/middleware) - Create error handling middleware
+- [Sessions](/advanced/sessions) - Handle session-related errors
+- [File Handling](/advanced/file-handling) - Handle file operation errors
+- [Best Practices](/advanced/best-practices) - Error handling patterns

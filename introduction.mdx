@@ -1,0 +1,152 @@
+---
+title: Introduction to Horse
+description: A fast, minimalist web framework for Delphi and Lazarus inspired by Express.js
+---
+
+# Introduction to Horse
+
+Horse is an **Express.js-inspired web framework** for Delphi and Lazarus, designed to ease development with a minimalist approach while delivering high performance. Built for modern Pascal development, Horse enables you to create RESTful APIs and web services quickly and efficiently.
+
+## Why Horse?
+
+Horse brings the simplicity and elegance of modern JavaScript frameworks to the Delphi/Lazarus ecosystem:
+
+<CardGroup cols={2}>
+  <Card title="Express-Inspired" icon="bolt">
+    Familiar routing and middleware patterns inspired by Express.js, making it intuitive for developers coming from Node.js
+  </Card>
+  <Card title="High Performance" icon="gauge-high">
+    Optimized for speed with efficient request handling and minimal overhead
+  </Card>
+  <Card title="Minimalist Design" icon="feather">
+    Clean, simple API that gets out of your way and lets you focus on building features
+  </Card>
+  <Card title="Cross-Platform" icon="desktop">
+    Works seamlessly with both Delphi (XE7+) and Lazarus/Free Pascal
+  </Card>
+</CardGroup>
+
+## Key Features
+
+### Simple Routing
+
+Define routes with a clean, chainable API:
+
+```delphi
+THorse.Get('/users/:id', 
+  procedure(Req: THorseRequest; Res: THorseResponse)
+  begin
+    Res.Send('User ID: ' + Req.Params['id']);
+  end);
+```
+
+### Middleware Support
+
+Extend functionality with middleware for authentication, logging, CORS, compression, and more:
+
+```delphi
+THorse.Use(Jhonson);  // JSON middleware
+THorse.Use(CORS);      // CORS middleware
+THorse.Use(HorseJWT('secret')); // JWT authentication
+```
+
+### Multiple HTTP Methods
+
+Support for all standard HTTP methods:
+
+```delphi
+THorse.Get('/resource', GetHandler);
+THorse.Post('/resource', PostHandler);
+THorse.Put('/resource/:id', PutHandler);
+THorse.Patch('/resource/:id', PatchHandler);
+THorse.Delete('/resource/:id', DeleteHandler);
+```
+
+### Flexible Deployment
+
+Horse supports multiple deployment scenarios:
+
+- **Console Application** - Standalone server
+- **VCL Application** - Windows GUI application
+- **Windows Service** - Background service
+- **ISAPI** - IIS integration
+- **Apache Module** - Apache web server
+- **CGI/FastCGI** - Traditional CGI deployment
+- **Daemon** - Linux/Unix daemon (Lazarus)
+
+## Architecture
+
+Horse follows a simple request-response cycle with middleware support:
+
+```
+Request → Middleware Chain → Route Handler → Response
+```
+
+### Core Components
+
+- **THorseRequest** - Encapsulates incoming HTTP requests with access to headers, query parameters, body, cookies, and route parameters
+- **THorseResponse** - Handles outgoing responses with methods for sending content, setting status codes, headers, and redirects
+- **THorseCallback** - Procedure type for route handlers and middleware
+- **Routing Engine** - Fast route matching with parameter extraction
+- **Middleware System** - Extensible request/response processing pipeline
+
+## Comparison to Other Frameworks
+
+| Feature | Horse | Traditional CGI | Raw ISAPI |
+|---------|-------|-----------------|----------|
+| Routing | Built-in with parameters | Manual parsing | Manual parsing |
+| Middleware | Yes | No | No |
+| JSON Support | Via middleware | Manual | Manual |
+| Ease of Use | High | Low | Low |
+| Performance | High | Medium | High |
+| Code Clarity | Very High | Low | Medium |
+
+## Ecosystem
+
+Horse has a rich ecosystem of official and community middleware:
+
+### Official Middleware
+
+- **[horse/json](https://github.com/HashLoad/jhonson)** - JSON request/response handling
+- **[horse/cors](https://github.com/HashLoad/horse-cors)** - Cross-Origin Resource Sharing
+- **[horse/jwt](https://github.com/HashLoad/horse-jwt)** - JSON Web Token authentication
+- **[horse/basic-auth](https://github.com/HashLoad/horse-basic-auth)** - Basic authentication
+- **[horse/logger](https://github.com/HashLoad/horse-logger)** - Request logging
+- **[horse/compression](https://github.com/HashLoad/horse-compression)** - Response compression
+- **[horse/exception](https://github.com/HashLoad/handle-exception)** - Exception handling
+- **[horse/stream](https://github.com/HashLoad/horse-octet-stream)** - Stream handling
+
+### Community Middleware
+
+The Horse community has created additional middleware for:
+- Rate limiting
+- File uploads
+- Static file serving
+- API documentation (Swagger)
+- Socket.IO
+- Pagination
+- And many more...
+
+## License
+
+Horse is free and open-source software licensed under the [MIT License](https://github.com/HashLoad/horse/blob/master/LICENSE).
+
+## Getting Started
+
+Ready to build your first Horse application?
+
+<Card title="Quick Start Guide" icon="rocket" href="/quickstart">
+  Get your first Horse server running in minutes
+</Card>
+
+## Community & Support
+
+Join the Horse community:
+
+- **GitHub**: [github.com/HashLoad/horse](https://github.com/HashLoad/horse)
+- **Telegram**: [t.me/hashload](https://t.me/hashload)
+- **Issues**: [Report bugs or request features](https://github.com/HashLoad/horse/issues)
+
+<Note>
+  Horse is actively maintained by HashLoad and a vibrant community of contributors.
+</Note>

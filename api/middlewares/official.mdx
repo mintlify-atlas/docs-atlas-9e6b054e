@@ -1,0 +1,354 @@
+---
+title: 'Official Middlewares'
+description: 'Officially maintained Horse middleware packages'
+---
+
+## Overview
+
+The Horse framework provides a collection of officially maintained middleware packages to extend functionality. These middlewares are maintained by the Horse core team and provide essential features for web applications.
+
+## Available Middlewares
+
+### horse/json (Jhonson)
+
+JSON serialization and deserialization middleware.
+
+- **Repository:** [github.com/HashLoad/jhonson](https://github.com/HashLoad/jhonson)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ✔️ Supported
+
+**Features:**
+- Automatic JSON parsing for request bodies
+- Automatic JSON serialization for response objects
+- Support for custom serialization rules
+
+**Installation:**
+```bash
+boss install jhonson
+```
+
+**Usage:**
+```delphi
+uses
+  Horse,
+  Horse.Jhonson;
+
+begin
+  THorse.Use(Jhonson);
+  
+  THorse.Post('/users',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    var
+      User: TUser;
+    begin
+      User := Req.Body<TUser>;
+      // User object automatically deserialized from JSON
+      Res.Send<TUser>(User); // Automatically serialized to JSON
+    end);
+    
+  THorse.Listen(9000);
+end.
+```
+
+### horse/basic-auth
+
+HTTP Basic Authentication middleware.
+
+- **Repository:** [github.com/HashLoad/horse-basic-auth](https://github.com/HashLoad/horse-basic-auth)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ✔️ Supported
+
+**Features:**
+- Simple username/password authentication
+- Custom validation callback support
+- Configurable realm
+
+**Installation:**
+```bash
+boss install horse-basic-auth
+```
+
+**Usage:**
+```delphi
+uses
+  Horse,
+  Horse.BasicAuthentication;
+
+begin
+  THorse.Use(HorseBasicAuthentication(
+    function(const AUsername, APassword: string): Boolean
+    begin
+      Result := (AUsername = 'admin') and (APassword = 'password');
+    end));
+    
+  THorse.Get('/protected',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('Access granted');
+    end);
+    
+  THorse.Listen(9000);
+end.
+```
+
+### horse/cors
+
+Cross-Origin Resource Sharing (CORS) middleware.
+
+- **Repository:** [github.com/HashLoad/horse-cors](https://github.com/HashLoad/horse-cors)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ✔️ Supported
+
+**Features:**
+- Configure allowed origins
+- Configure allowed methods
+- Configure allowed headers
+- Support for credentials
+
+**Installation:**
+```bash
+boss install horse-cors
+```
+
+**Usage:**
+```delphi
+uses
+  Horse,
+  Horse.CORS;
+
+begin
+  THorse.Use(CORS);
+  
+  // Or with custom configuration
+  THorse.Use(CORS
+    .AllowedOrigin('*')
+    .AllowedMethods('GET,POST,PUT,DELETE')
+    .AllowedHeaders('Content-Type'));
+    
+  THorse.Listen(9000);
+end.
+```
+
+### horse/stream
+
+Octet stream middleware for binary data handling.
+
+- **Repository:** [github.com/HashLoad/horse-octet-stream](https://github.com/HashLoad/horse-octet-stream)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ✔️ Supported
+
+**Features:**
+- Handle binary request data
+- Send binary response data
+- Stream processing support
+
+**Installation:**
+```bash
+boss install horse-octet-stream
+```
+
+**Usage:**
+```delphi
+uses
+  Horse,
+  Horse.OctetStream;
+
+begin
+  THorse.Use(OctetStream);
+  
+  THorse.Post('/upload',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    var
+      Stream: TStream;
+    begin
+      Stream := Req.Body<TStream>;
+      // Process binary stream
+      Res.Send('Upload complete');
+    end);
+    
+  THorse.Listen(9000);
+end.
+```
+
+### horse/jwt
+
+JSON Web Token (JWT) authentication middleware.
+
+- **Repository:** [github.com/HashLoad/horse-jwt](https://github.com/HashLoad/horse-jwt)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ✔️ Supported
+
+**Features:**
+- JWT token validation
+- Token generation helpers
+- Configurable secret key
+- Custom claims support
+
+**Installation:**
+```bash
+boss install horse-jwt
+```
+
+**Usage:**
+```delphi
+uses
+  Horse,
+  Horse.JWT,
+  JOSE.Core.JWT;
+
+begin
+  THorse.Post('/login',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    var
+      Token: string;
+    begin
+      // Validate credentials
+      Token := HorseJWT.CreateToken('my-secret', 'username');
+      Res.Send(Token);
+    end);
+    
+  THorse.Use('/api', HorseJWT('my-secret'));
+  
+  THorse.Get('/api/protected',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('Protected resource');
+    end);
+    
+  THorse.Listen(9000);
+end.
+```
+
+### horse/exception
+
+Exception handling middleware.
+
+- **Repository:** [github.com/HashLoad/handle-exception](https://github.com/HashLoad/handle-exception)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ✔️ Supported
+
+**Features:**
+- Global exception handling
+- Custom error responses
+- Exception logging
+- Development/production modes
+
+**Installation:**
+```bash
+boss install handle-exception
+```
+
+**Usage:**
+```delphi
+uses
+  Horse,
+  Horse.HandleException;
+
+begin
+  THorse.Use(HandleException);
+  
+  THorse.Get('/error',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      raise Exception.Create('Something went wrong');
+    end);
+    
+  THorse.Listen(9000);
+end.
+```
+
+### horse/logger
+
+Request/response logging middleware.
+
+- **Repository:** [github.com/HashLoad/horse-logger](https://github.com/HashLoad/horse-logger)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ✔️ Supported
+
+**Features:**
+- Request logging
+- Response logging
+- Configurable log formats
+- File and console output
+
+**Installation:**
+```bash
+boss install horse-logger
+```
+
+**Usage:**
+```delphi
+uses
+  Horse,
+  Horse.Logger;
+
+begin
+  THorse.Use(HorseLogger);
+  
+  THorse.Get('/test',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('Test');
+    end);
+    
+  THorse.Listen(9000);
+end.
+```
+
+### horse/compression
+
+Response compression middleware (gzip, deflate).
+
+- **Repository:** [github.com/HashLoad/horse-compression](https://github.com/HashLoad/horse-compression)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ✔️ Supported
+
+**Features:**
+- Gzip compression
+- Deflate compression
+- Configurable compression threshold
+- Content-type filtering
+
+**Installation:**
+```bash
+boss install horse-compression
+```
+
+**Usage:**
+```delphi
+uses
+  Horse,
+  Horse.Compression;
+
+begin
+  THorse.Use(Compression);
+  
+  THorse.Get('/large-data',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('Large response data here...');
+      // Automatically compressed if client supports it
+    end);
+    
+  THorse.Listen(9000);
+end.
+```
+
+## Compatibility Matrix
+
+| Middleware | Delphi | Lazarus |
+|------------|--------|----------|
+| horse/json | ✔️ | ✔️ |
+| horse/basic-auth | ✔️ | ✔️ |
+| horse/cors | ✔️ | ✔️ |
+| horse/stream | ✔️ | ✔️ |
+| horse/jwt | ✔️ | ✔️ |
+| horse/exception | ✔️ | ✔️ |
+| horse/logger | ✔️ | ✔️ |
+| horse/compression | ✔️ | ✔️ |
+
+## See Also
+
+- [Third-Party Middlewares](/api/middlewares/third-party) - Community-created middlewares
+- [THorse](/api/thorse) - Main framework API
+- [Callbacks](/api/callbacks) - Middleware callback types

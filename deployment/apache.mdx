@@ -1,0 +1,506 @@
+---
+title: Apache Module Deployment
+description: Deploy Horse as an Apache HTTP Server module for high-performance web hosting
+---
+
+## Overview
+
+Apache module deployment allows you to run Horse applications as native Apache modules. This provides tight integration with Apache's infrastructure, including its process management, logging, security features, and extensive module ecosystem.
+
+<Note>
+Apache deployment requires the `HORSE_APACHE` conditional define and compiles to a DLL (Windows) or SO (Linux) library instead of an executable.
+</Note>
+
+## When to Use Apache Deployment
+
+- **Enterprise Hosting**: Integration with existing Apache infrastructure
+- **Shared Hosting**: Multiple applications on a single Apache instance
+- **Load Balancing**: Leverage Apache's built-in load balancing
+- **Security**: Use Apache's authentication and authorization modules
+- **Static + Dynamic**: Serve static content with Apache, dynamic with Horse
+- **Reverse Proxy**: Apache handles SSL termination and proxying
+
+## Required Conditional Define
+
+<Warning>
+You **must** add `HORSE_APACHE` to your project's conditional defines.
+</Warning>
+
+<Steps>
+  <Step title="Open Project Options">
+    Go to **Project → Options → Delphi Compiler → Compiling**
+  </Step>
+  
+  <Step title="Add Conditional Define">
+    Add: `HORSE_APACHE`
+  </Step>
+  
+  <Step title="Change Target to Library">
+    Ensure your project is a **library** (not program)
+  </Step>
+  
+  <Step title="Rebuild Project">
+    Clean and rebuild your project completely
+  </Step>
+</Steps>
+
+## Complete Apache Module Example
+
+```delphi
+library Apache;
+
+{$R *.res}
+
+(*
+ httpd.conf entries:
+ LoadModule apache_horse_module modules/Apache.dll
+ <Location /apache_horse>
+    SetHandler apache_horse_module-handle
+ </Location>
+ To use the feature:
+ http://localhost/apache_horse/ping
+ These entries assume that the output directory for this project is the apache/modules directory.
+ httpd.conf entries should be different if the project is changed in these ways:
+   1. The TApacheModuleData variable name is changed.
+   2. The project is renamed.
+   3. The output directory is not the apache/modules directory.
+   4. The dynamic library extension depends on a platform. Use .dll on Windows and .so on Linux.
+*)
+
+// Declare exported variable so that Apache can access this module.
+
+uses Horse, Web.HTTPD24Impl;
+
+var
+  ApacheModuleData: TApacheModuleData;
+
+exports
+  ApacheModuleData name 'apache_horse_module';
+
+begin
+  // Need to set "HORSE_APACHE" compilation directive
+
+  THorse.DefaultModule := @ApacheModuleData;
+  THorse.HandlerName := 'apache_horse_module-handle';
+
+  THorse.Get('/ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong');
+    end);
+
+  THorse.Listen;
+end.
+```
+
+## Apache Configuration
+
+### Windows Configuration
+
+<Steps>
+  <Step title="Copy Module to Apache Directory">
+    Copy your compiled `Apache.dll` to the Apache `modules` directory:
+    ```bash
+    copy Apache.dll "C:\Apache24\modules\"
+    ```
+  </Step>
+  
+  <Step title="Edit httpd.conf">
+    Add the following to your `httpd.conf` file:
+    ```apache
+    # Load the Horse module
+    LoadModule apache_horse_module modules/Apache.dll
+    
+    # Configure location
+    <Location /apache_horse>
+        SetHandler apache_horse_module-handle
+    </Location>
+    ```
+  </Step>
+  
+  <Step title="Restart Apache">
+    ```bash
+    httpd.exe -k restart
+    ```
+  </Step>
+  
+  <Step title="Test the Module">
+    Navigate to: `http://localhost/apache_horse/ping`
+  </Step>
+</Steps>
+
+### Linux Configuration
+
+<Steps>
+  <Step title="Copy Module to Apache Directory">
+    ```bash
+    sudo cp Apache.so /usr/lib/apache2/modules/
+    sudo chmod 755 /usr/lib/apache2/modules/Apache.so
+    ```
+  </Step>
+  
+  <Step title="Create Module Configuration">
+    Create `/etc/apache2/mods-available/horse.load`:
+    ```apache
+    LoadModule apache_horse_module /usr/lib/apache2/modules/Apache.so
+    ```
+    
+    Create `/etc/apache2/mods-available/horse.conf`:
+    ```apache
+    <Location /apache_horse>
+        SetHandler apache_horse_module-handle
+    </Location>
+    ```
+  </Step>
+  
+  <Step title="Enable Module">
+    ```bash
+    sudo a2enmod horse
+    sudo systemctl restart apache2
+    ```
+  </Step>
+  
+  <Step title="Test the Module">
+    ```bash
+    curl http://localhost/apache_horse/ping
+    ```
+  </Step>
+</Steps>
+
+## Advanced Configuration
+
+### Multiple Routes and Endpoints
+
+```delphi
+library ApacheAPI;
+
+uses
+  Horse,
+  Web.HTTPD24Impl,
+  System.JSON,
+  System.SysUtils;
+
+var
+  ApacheModuleData: TApacheModuleData;
+
+exports
+  ApacheModuleData name 'horse_api_module';
+
+begin
+  THorse.DefaultModule := @ApacheModuleData;
+  THorse.HandlerName := 'horse_api_module-handle';
+
+  // Health check
+  THorse.Get('/health',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('{"status": "healthy"}');
+    end);
+
+  // RESTful API endpoints
+  THorse.Get('/api/users',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('[{"id": 1, "name": "John"}, {"id": 2, "name": "Jane"}]');
+    end);
+
+  THorse.Get('/api/users/:id',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    var
+      UserId: string;
+    begin
+      UserId := Req.Params['id'];
+      Res.Send(Format('{"id": %s, "name": "User %s"}', [UserId, UserId]));
+    end);
+
+  THorse.Post('/api/users',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    var
+      Body: string;
+    begin
+      Body := Req.Body;
+      Res.Status(201).Send('{"id": 3, "created": true}');
+    end);
+
+  // Static content fallback
+  THorse.Get('/assets/*',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('Asset served by Apache');
+    end);
+
+  THorse.Listen;
+end.
+```
+
+### Apache Configuration with Virtual Hosts
+
+```apache
+# Load the module
+LoadModule horse_api_module modules/ApacheAPI.dll
+
+<VirtualHost *:80>
+    ServerName api.example.com
+    DocumentRoot "C:/www/api"
+    
+    # Serve static files with Apache
+    <Directory "C:/www/api/static">
+        Require all granted
+    </Directory>
+    
+    # Route API requests to Horse module
+    <Location /api>
+        SetHandler horse_api_module-handle
+    </Location>
+    
+    # Health check endpoint
+    <Location /health>
+        SetHandler horse_api_module-handle
+    </Location>
+    
+    ErrorLog "logs/api-error.log"
+    CustomLog "logs/api-access.log" common
+</VirtualHost>
+```
+
+## SSL/TLS Configuration
+
+### Apache Handles SSL (Recommended)
+
+```apache
+<VirtualHost *:443>
+    ServerName api.example.com
+    
+    SSLEngine on
+    SSLCertificateFile "conf/ssl/server.crt"
+    SSLCertificateKeyFile "conf/ssl/server.key"
+    SSLCertificateChainFile "conf/ssl/ca-bundle.crt"
+    
+    # Modern SSL configuration
+    SSLProtocol all -SSLv3 -TLSv1 -TLSv1.1
+    SSLCipherSuite HIGH:!aNULL:!MD5
+    SSLHonorCipherOrder on
+    
+    <Location /api>
+        SetHandler horse_api_module-handle
+    </Location>
+</VirtualHost>
+```
+
+## Module Configuration Options
+
+### Setting Handler Name
+
+```delphi
+THorse.HandlerName := 'my_custom_handler';
+```
+
+Corresponding Apache config:
+```apache
+<Location /myapp>
+    SetHandler my_custom_handler
+</Location>
+```
+
+### Max Connections
+
+```delphi
+THorse.MaxConnections := 100;
+```
+
+### Module-Specific Settings
+
+```delphi
+begin
+  // Configure module
+  THorse.DefaultModule := @ApacheModuleData;
+  THorse.HandlerName := 'apache_horse_module-handle';
+  THorse.MaxConnections := 200;
+  
+  // Configure routes
+  ConfigureRoutes;
+  
+  // Start listening
+  THorse.Listen(
+    procedure
+    begin
+      // Initialization callback
+      // Note: Don't use console output in Apache modules
+    end);
+end;
+```
+
+## Reverse Proxy Alternative
+
+<Note>
+Instead of using the Apache module, you can also run Horse as a console application and use Apache as a reverse proxy.
+</Note>
+
+```apache
+# Enable required modules
+LoadModule proxy_module modules/mod_proxy.so
+LoadModule proxy_http_module modules/mod_proxy_http.so
+
+<VirtualHost *:80>
+    ServerName api.example.com
+    
+    # Proxy to Horse console application
+    ProxyPreserveHost On
+    ProxyPass /api http://localhost:9000/api
+    ProxyPassReverse /api http://localhost:9000/api
+    
+    # WebSocket support (if needed)
+    ProxyPass /ws ws://localhost:9000/ws
+    ProxyPassReverse /ws ws://localhost:9000/ws
+</VirtualHost>
+```
+
+## Performance Optimization
+
+### Apache MPM Configuration
+
+```apache
+# For Windows (MPM WinNT)
+<IfModule mpm_winnt_module>
+    ThreadsPerChild 250
+    MaxConnectionsPerChild 0
+</IfModule>
+
+# For Linux (MPM Worker)
+<IfModule mpm_worker_module>
+    StartServers 3
+    MinSpareThreads 75
+    MaxSpareThreads 250
+    ThreadsPerChild 25
+    MaxRequestWorkers 400
+    MaxConnectionsPerChild 0
+</IfModule>
+```
+
+### Caching
+
+```apache
+<Location /api>
+    SetHandler horse_api_module-handle
+    
+    # Cache static responses
+    <If "%{REQUEST_URI} =~ /static/">
+        Header set Cache-Control "max-age=86400, public"
+    </If>
+</Location>
+```
+
+## Troubleshooting
+
+### Module Fails to Load
+
+<Warning>
+Common issues:
+- Missing `HORSE_APACHE` conditional define
+- Incorrect export declaration
+- Missing dependencies (RTL packages)
+- Mismatched Apache version (requires Apache 2.4)
+</Warning>
+
+```bash
+# Check Apache error log
+tail -f /var/log/apache2/error.log
+
+# Test configuration
+apachectl configtest
+
+# Load module manually
+apachectl -M | grep horse
+```
+
+### Handler Not Found
+
+Verify handler name matches:
+
+```delphi
+// In code
+THorse.HandlerName := 'apache_horse_module-handle';
+```
+
+```apache
+# In httpd.conf
+SetHandler apache_horse_module-handle
+```
+
+### Memory Leaks
+
+```delphi
+// Enable leak reporting in development
+{$IFDEF DEBUG}
+ReportMemoryLeaksOnShutdown := True;
+{$ENDIF}
+```
+
+### Permission Issues (Linux)
+
+```bash
+# Ensure correct permissions
+sudo chown root:root /usr/lib/apache2/modules/Apache.so
+sudo chmod 755 /usr/lib/apache2/modules/Apache.so
+
+# Check SELinux (if enabled)
+sudo setenforce 0  # Temporarily disable for testing
+```
+
+## Platform-Specific Considerations
+
+### Windows
+
+- Use `.dll` extension
+- Place in `Apache24\modules\`
+- May require Visual C++ Redistributable
+- Test with `httpd.exe -t`
+
+### Linux
+
+- Use `.so` extension
+- Place in `/usr/lib/apache2/modules/`
+- Ensure proper file permissions (755)
+- Use `apache2ctl configtest`
+
+## Deployment Checklist
+
+<Steps>
+  <Step title="Compile Module">
+    ✅ `HORSE_APACHE` conditional define set  
+    ✅ Built as library (not program)  
+    ✅ Release configuration  
+    ✅ Correct target platform  
+  </Step>
+  
+  <Step title="Install Module">
+    ✅ Copied to Apache modules directory  
+    ✅ Correct file permissions  
+    ✅ Correct file extension (.dll/.so)  
+  </Step>
+  
+  <Step title="Configure Apache">
+    ✅ LoadModule directive added  
+    ✅ Handler configured  
+    ✅ Location/Directory settings  
+    ✅ Configuration tested  
+  </Step>
+  
+  <Step title="Test Deployment">
+    ✅ Apache starts successfully  
+    ✅ Module loads without errors  
+    ✅ Endpoints respond correctly  
+    ✅ Error handling works  
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="ISAPI Deployment" icon="window" href="/deployment/isapi">
+    Deploy with IIS using ISAPI
+  </Card>
+  <Card title="CGI Deployment" icon="gear" href="/deployment/cgi">
+    Standard CGI deployment
+  </Card>
+</CardGroup>

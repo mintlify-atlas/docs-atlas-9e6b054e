@@ -1,0 +1,517 @@
+---
+title: 'THorse'
+description: 'Main Horse framework class with routing and middleware methods'
+---
+
+## Overview
+
+`THorse` is the main class of the Horse web framework. It extends `THorseProvider` (which extends `THorseCore`) and provides all routing, middleware, and server control functionality.
+
+```delphi
+type
+  THorse = class(THorseProvider);
+```
+
+## Routing Methods
+
+### Get
+
+Register a route that responds to GET requests.
+
+```delphi
+class function Get(const APath: string; const ACallback: THorseCallback): THorseCore;
+class function Get(const APath: string; const ACallback: THorseCallbackRequestResponse): THorseCore;
+class function Get(const APath: string; const ACallback: THorseCallbackRequest): THorseCore;
+class function Get(const APath: string; const ACallback: THorseCallbackResponse): THorseCore; // Delphi only
+```
+
+<ParamField path="APath" type="string" required>
+  The route path (e.g., '/users', '/products/:id')
+</ParamField>
+
+<ParamField path="ACallback" type="THorseCallback | THorseCallbackRequestResponse | THorseCallbackRequest | THorseCallbackResponse" required>
+  The callback function to execute when the route is matched
+</ParamField>
+
+<ResponseField name="Result" type="THorseCore">
+  Returns the Horse instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Get('/users',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.Send('List of users');
+  end);
+
+// With route parameters
+THorse.Get('/users/:id',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.Send('User ID: ' + Req.Params['id']);
+  end);
+```
+
+### Post
+
+Register a route that responds to POST requests.
+
+```delphi
+class function Post(const APath: string; const ACallback: THorseCallback): THorseCore;
+class function Post(const APath: string; const ACallback: THorseCallbackRequestResponse): THorseCore;
+class function Post(const APath: string; const ACallback: THorseCallbackRequest): THorseCore;
+class function Post(const APath: string; const ACallback: THorseCallbackResponse): THorseCore; // Delphi only
+```
+
+<ParamField path="APath" type="string" required>
+  The route path
+</ParamField>
+
+<ParamField path="ACallback" type="THorseCallback | THorseCallbackRequestResponse | THorseCallbackRequest | THorseCallbackResponse" required>
+  The callback function to execute
+</ParamField>
+
+<ResponseField name="Result" type="THorseCore">
+  Returns the Horse instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Post('/users',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    // Create new user with Req.Body
+    Res.Status(THTTPStatus.Created).Send('User created');
+  end);
+```
+
+### Put
+
+Register a route that responds to PUT requests.
+
+```delphi
+class function Put(const APath: string; const ACallback: THorseCallback): THorseCore;
+class function Put(const APath: string; const ACallback: THorseCallbackRequestResponse): THorseCore;
+class function Put(const APath: string; const ACallback: THorseCallbackRequest): THorseCore;
+class function Put(const APath: string; const ACallback: THorseCallbackResponse): THorseCore; // Delphi only
+```
+
+<ParamField path="APath" type="string" required>
+  The route path
+</ParamField>
+
+<ParamField path="ACallback" type="THorseCallback | THorseCallbackRequestResponse | THorseCallbackRequest | THorseCallbackResponse" required>
+  The callback function to execute
+</ParamField>
+
+<ResponseField name="Result" type="THorseCore">
+  Returns the Horse instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Put('/users/:id',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    // Update user with ID from Req.Params['id']
+    Res.Send('User updated');
+  end);
+```
+
+### Delete
+
+Register a route that responds to DELETE requests.
+
+```delphi
+class function Delete(const APath: string; const ACallback: THorseCallback): THorseCore;
+class function Delete(const APath: string; const ACallback: THorseCallbackRequestResponse): THorseCore;
+class function Delete(const APath: string; const ACallback: THorseCallbackRequest): THorseCore;
+class function Delete(const APath: string; const ACallback: THorseCallbackResponse): THorseCore; // Delphi only
+```
+
+<ParamField path="APath" type="string" required>
+  The route path
+</ParamField>
+
+<ParamField path="ACallback" type="THorseCallback | THorseCallbackRequestResponse | THorseCallbackRequest | THorseCallbackResponse" required>
+  The callback function to execute
+</ParamField>
+
+<ResponseField name="Result" type="THorseCore">
+  Returns the Horse instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Delete('/users/:id',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    // Delete user with ID from Req.Params['id']
+    Res.Status(THTTPStatus.NoContent).Send('');
+  end);
+```
+
+### Patch
+
+Register a route that responds to PATCH requests.
+
+```delphi
+class function Patch(const APath: string; const ACallback: THorseCallback): THorseCore;
+class function Patch(const APath: string; const ACallback: THorseCallbackRequestResponse): THorseCore;
+class function Patch(const APath: string; const ACallback: THorseCallbackRequest): THorseCore;
+class function Patch(const APath: string; const ACallback: THorseCallbackResponse): THorseCore; // Delphi only
+```
+
+<ParamField path="APath" type="string" required>
+  The route path
+</ParamField>
+
+<ParamField path="ACallback" type="THorseCallback | THorseCallbackRequestResponse | THorseCallbackRequest | THorseCallbackResponse" required>
+  The callback function to execute
+</ParamField>
+
+<ResponseField name="Result" type="THorseCore">
+  Returns the Horse instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Patch('/users/:id',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    // Partially update user
+    Res.Send('User patched');
+  end);
+```
+
+### Head
+
+Register a route that responds to HEAD requests.
+
+```delphi
+class function Head(const APath: string; const ACallback: THorseCallback): THorseCore;
+class function Head(const APath: string; const ACallback: THorseCallbackRequestResponse): THorseCore;
+class function Head(const APath: string; const ACallback: THorseCallbackRequest): THorseCore;
+class function Head(const APath: string; const ACallback: THorseCallbackResponse): THorseCore; // Delphi only
+```
+
+<ParamField path="APath" type="string" required>
+  The route path
+</ParamField>
+
+<ParamField path="ACallback" type="THorseCallback | THorseCallbackRequestResponse | THorseCallbackRequest | THorseCallbackResponse" required>
+  The callback function to execute
+</ParamField>
+
+<ResponseField name="Result" type="THorseCore">
+  Returns the Horse instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Head('/users',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.Status(THTTPStatus.Ok);
+  end);
+```
+
+### All
+
+Register a route that responds to all HTTP methods.
+
+```delphi
+class function All(const APath: string; const ACallback: THorseCallback): THorseCore;
+class function All(const APath: string; const ACallback: THorseCallbackRequestResponse): THorseCore;
+class function All(const APath: string; const ACallback: THorseCallbackRequest): THorseCore;
+class function All(const APath: string; const ACallback: THorseCallbackResponse): THorseCore; // Delphi only
+```
+
+<ParamField path="APath" type="string" required>
+  The route path
+</ParamField>
+
+<ParamField path="ACallback" type="THorseCallback | THorseCallbackRequestResponse | THorseCallbackRequest | THorseCallbackResponse" required>
+  The callback function to execute
+</ParamField>
+
+<ResponseField name="Result" type="THorseCore">
+  Returns the Horse instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.All('/status',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.Send('Server is running');
+  end);
+```
+
+## Middleware Methods
+
+### Use
+
+Register middleware that executes for all routes or routes matching a specific path.
+
+```delphi
+class function Use(const ACallback: THorseCallback): THorseCore;
+class function Use(const APath: string; const ACallback: THorseCallback): THorseCore;
+class function Use(const ACallbacks: array of THorseCallback): THorseCore;
+class function Use(const APath: string; const ACallbacks: array of THorseCallback): THorseCore;
+```
+
+<ParamField path="APath" type="string">
+  Optional path prefix to apply middleware to. If not provided, middleware applies to all routes.
+</ParamField>
+
+<ParamField path="ACallback" type="THorseCallback" required>
+  The middleware callback function
+</ParamField>
+
+<ParamField path="ACallbacks" type="array of THorseCallback" required>
+  Array of middleware callbacks to register
+</ParamField>
+
+<ResponseField name="Result" type="THorseCore">
+  Returns the Horse instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+// Global middleware
+THorse.Use(
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Writeln('Request received: ' + Req.PathInfo);
+    Next; // Call next middleware/route
+  end);
+
+// Path-specific middleware
+THorse.Use('/api',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    // Middleware only for /api/* routes
+    Next;
+  end);
+
+// Multiple middlewares
+THorse.Use([Middleware1, Middleware2, Middleware3]);
+```
+
+## Grouping and Routing
+
+### Route
+
+Create a route builder for advanced route configuration.
+
+```delphi
+class function Route(const APath: string): IHorseCoreRoute<THorseCore>;
+```
+
+<ParamField path="APath" type="string" required>
+  The route path
+</ParamField>
+
+<ResponseField name="Result" type="IHorseCoreRoute<THorseCore>">
+  Returns a route builder interface
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Route('/users')
+  .Get(
+    procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+    begin
+      Res.Send('Get users');
+    end)
+  .Post(
+    procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+    begin
+      Res.Send('Create user');
+    end);
+```
+
+### Group
+
+Create a group builder for organizing related routes.
+
+```delphi
+class function Group: IHorseCoreGroup<THorseCore>;
+```
+
+<ResponseField name="Result" type="IHorseCoreGroup<THorseCore>">
+  Returns a group builder interface
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Group
+  .Prefix('/api/v1')
+  .Get('/users',
+    procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+    begin
+      Res.Send('Users');
+    end)
+  .Get('/products',
+    procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+    begin
+      Res.Send('Products');
+    end);
+```
+
+## Server Control Methods
+
+### Listen
+
+Start the HTTP server and begin listening for requests.
+
+```delphi
+class procedure Listen; overload;
+class procedure Listen(const APort: Integer; const AHost: string = '0.0.0.0'; const ACallbackListen: TProc = nil; const ACallbackStopListen: TProc = nil); overload;
+class procedure Listen(const APort: Integer; const ACallbackListen: TProc; const ACallbackStopListen: TProc = nil); overload;
+class procedure Listen(const AHost: string; const ACallbackListen: TProc = nil; const ACallbackStopListen: TProc = nil); overload;
+class procedure Listen(const ACallbackListen: TProc; const ACallbackStopListen: TProc = nil); overload;
+```
+
+<ParamField path="APort" type="Integer">
+  The port number to listen on (default: 9000)
+</ParamField>
+
+<ParamField path="AHost" type="string">
+  The host address to bind to (default: '0.0.0.0')
+</ParamField>
+
+<ParamField path="ACallbackListen" type="TProc">
+  Optional callback executed when server starts listening
+</ParamField>
+
+<ParamField path="ACallbackStopListen" type="TProc">
+  Optional callback executed when server stops listening
+</ParamField>
+
+**Example:**
+
+```delphi
+// Simple listen on default port 9000
+THorse.Listen;
+
+// Listen on specific port
+THorse.Listen(8080);
+
+// Listen with callback
+THorse.Listen(9000,
+  procedure
+  begin
+    Writeln('Server is running on port 9000');
+  end);
+
+// Listen on specific host and port
+THorse.Listen(8080, '127.0.0.1',
+  procedure
+  begin
+    Writeln('Server started on 127.0.0.1:8080');
+  end,
+  procedure
+  begin
+    Writeln('Server stopped');
+  end);
+```
+
+### StopListen
+
+Stop the HTTP server.
+
+```delphi
+class procedure StopListen;
+```
+
+**Example:**
+
+```delphi
+THorse.StopListen;
+```
+
+## Server Configuration Properties
+
+### Port
+
+Get or set the server port.
+
+```delphi
+class property Port: Integer read GetPort write SetPort;
+```
+
+**Example:**
+
+```delphi
+THorse.Port := 8080;
+THorse.Listen;
+```
+
+### Host
+
+Get or set the server host address.
+
+```delphi
+class property Host: string read GetHost write SetHost;
+```
+
+**Example:**
+
+```delphi
+THorse.Host := '127.0.0.1';
+THorse.Listen;
+```
+
+### MaxConnections
+
+Get or set the maximum number of simultaneous connections.
+
+```delphi
+class property MaxConnections: Integer read GetMaxConnections write SetMaxConnections;
+```
+
+**Example:**
+
+```delphi
+THorse.MaxConnections := 1000;
+THorse.Listen;
+```
+
+## Utility Methods
+
+### Version
+
+Get the current Horse framework version.
+
+```delphi
+class function Version: string;
+```
+
+<ResponseField name="Result" type="string">
+  Returns the version string
+</ResponseField>
+
+**Example:**
+
+```delphi
+Writeln('Horse version: ' + THorse.Version);
+```
+
+## See Also
+
+- [THorseRequest](/api/thorse-request) - Request object API
+- [THorseResponse](/api/thorse-response) - Response object API
+- [Callback Types](/api/callbacks) - Callback type definitions

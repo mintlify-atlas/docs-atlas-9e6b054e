@@ -1,0 +1,507 @@
+---
+title: Ecosystem
+description: Discover the tools, middlewares, and community resources that make Horse a complete web framework ecosystem
+---
+
+Horse has a rich ecosystem of official and community-contributed middlewares, development tools, and supporting libraries that extend its functionality and streamline development.
+
+## Package Management
+
+### Boss Package Manager
+
+Boss is the recommended package manager for Delphi and Lazarus projects. It simplifies dependency management and makes installing Horse and its middlewares effortless.
+
+<CardGroup cols={2}>
+  <Card title="Boss on GitHub" icon="github" href="https://github.com/HashLoad/boss">
+    View the Boss repository and documentation
+  </Card>
+  
+  <Card title="Install Boss" icon="download">
+    Download and set up Boss for your development environment
+  </Card>
+</CardGroup>
+
+**Installing Horse with Boss:**
+
+```bash
+boss install horse
+```
+
+**Installing Middlewares:**
+
+```bash
+boss install horse-cors
+boss install horse-jwt
+boss install horse-logger
+```
+
+<Note>
+Boss automatically manages dependencies, downloads packages, and configures your project paths.
+</Note>
+
+### Horse Wizard
+
+Horse Wizard is a code generation tool that scaffolds Horse projects with boilerplate code, saving you time on initial setup.
+
+<Card title="Horse Wizard" icon="wand-magic-sparkles" href="https://github.com/HashLoad/horse-wizard">
+  Generate Horse projects quickly with interactive wizards
+</Card>
+
+**Installation:**
+
+```bash
+boss install horse-wizard
+```
+
+## Official Middlewares
+
+Official middlewares are maintained by the Horse core team and support both Delphi and Lazarus.
+
+### JSON Middleware
+
+**horse/json** provides automatic JSON serialization and deserialization.
+
+<Card title="Jhonson (JSON)" icon="brackets-curly" href="https://github.com/HashLoad/jhonson">
+  Automatic JSON handling for requests and responses
+</Card>
+
+```bash
+boss install jhonson
+```
+
+```delphi
+uses
+  Horse,
+  Horse.Jhonson; // JSON middleware
+
+begin
+  THorse.Use(Jhonson); // Enable JSON support
+  
+  THorse.Post('/users',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    var
+      Body: TJSONObject;
+    begin
+      Body := Req.Body<TJSONObject>;
+      // Process JSON body
+      Res.Send<TJSONObject>(Body);
+    end);
+    
+  THorse.Listen(9000);
+end.
+```
+
+### CORS Middleware
+
+**horse/cors** handles Cross-Origin Resource Sharing (CORS) headers.
+
+<Card title="Horse CORS" icon="globe" href="https://github.com/HashLoad/horse-cors">
+  Enable CORS for cross-origin requests
+</Card>
+
+```bash
+boss install horse-cors
+```
+
+```delphi
+uses
+  Horse,
+  Horse.CORS;
+
+begin
+  THorse.Use(CORS); // Enable CORS with default settings
+  
+  THorse.Get('/api/data',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('Accessible from any origin');
+    end);
+    
+  THorse.Listen(9000);
+end.
+```
+
+### Authentication Middlewares
+
+<Tabs>
+  <Tab title="Basic Auth">
+    **horse/basic-auth** implements HTTP Basic Authentication.
+    
+    <Card title="Horse Basic Auth" icon="lock" href="https://github.com/HashLoad/horse-basic-auth">
+      HTTP Basic Authentication middleware
+    </Card>
+    
+    ```bash
+    boss install horse-basic-auth
+    ```
+    
+    ```delphi
+    uses
+      Horse,
+      Horse.BasicAuthentication;
+    
+    procedure OnAuthentication(Req: THorseRequest; Res: THorseResponse; 
+      Next: TProc);
+    begin
+      if Req.Headers['Authorization'] = 'Basic dXNlcjpwYXNz' then
+        Next
+      else
+        Res.Status(401).Send('Unauthorized');
+    end;
+    
+    begin
+      THorse.Use(HorseBasicAuthentication(OnAuthentication));
+      
+      THorse.Get('/protected',
+        procedure(Req: THorseRequest; Res: THorseResponse)
+        begin
+          Res.Send('Protected content');
+        end);
+        
+      THorse.Listen(9000);
+    end.
+    ```
+  </Tab>
+  
+  <Tab title="JWT">
+    **horse/jwt** provides JSON Web Token authentication.
+    
+    <Card title="Horse JWT" icon="key" href="https://github.com/HashLoad/horse-jwt">
+      JWT authentication and authorization
+    </Card>
+    
+    ```bash
+    boss install horse-jwt
+    ```
+    
+    ```delphi
+    uses
+      Horse,
+      Horse.JWT;
+    
+    begin
+      THorse.Use(HorseJWT('my-secret-key'));
+      
+      THorse.Get('/api/secure',
+        procedure(Req: THorseRequest; Res: THorseResponse)
+        begin
+          Res.Send('JWT verified content');
+        end);
+        
+      THorse.Listen(9000);
+    end.
+    ```
+  </Tab>
+</Tabs>
+
+### Utility Middlewares
+
+<CardGroup cols={2}>
+  <Card title="Stream/Octet-Stream" icon="file-binary" href="https://github.com/HashLoad/horse-octet-stream">
+    Handle binary file uploads and downloads
+  </Card>
+  
+  <Card title="Exception Handler" icon="shield-exclamation" href="https://github.com/HashLoad/handle-exception">
+    Centralized exception handling and logging
+  </Card>
+  
+  <Card title="Logger" icon="file-lines" href="https://github.com/HashLoad/horse-logger">
+    Request and response logging
+  </Card>
+  
+  <Card title="Compression" icon="file-zipper" href="https://github.com/HashLoad/horse-compression">
+    Response compression (gzip, deflate)
+  </Card>
+</CardGroup>
+
+**Installation:**
+
+```bash
+boss install horse-octet-stream
+boss install handle-exception
+boss install horse-logger
+boss install horse-compression
+```
+
+## Community Middlewares
+
+The Horse community has created many additional middlewares for specialized use cases.
+
+### Performance and Caching
+
+<AccordionGroup>
+  <Accordion title="ETag Middleware">
+    **bittencourtthulio/etag** - Automatic ETag generation for caching.
+    
+    <Card href="https://github.com/bittencourtthulio/Horse-ETag" icon="tag">
+      GitHub Repository
+    </Card>
+    
+    Supports: Delphi ✓ | Lazarus ✓
+  </Accordion>
+  
+  <Accordion title="Cache Control">
+    **bittencourtthulio/cachecontrol** - Cache-Control header management.
+    
+    <Card href="https://github.com/bittencourtthulio/horse-cachecontrol" icon="clock">
+      GitHub Repository
+    </Card>
+    
+    Supports: Delphi ✓ | Lazarus ✗
+  </Accordion>
+  
+  <Accordion title="Rate Limiting">
+    **dliocode/ratelimit** - Request rate limiting.
+    
+    <Card href="https://github.com/dliocode/horse-ratelimit" icon="gauge-high">
+      GitHub Repository
+    </Card>
+    
+    Supports: Delphi ✓ | Lazarus ✗
+  </Accordion>
+  
+  <Accordion title="Slowdown">
+    **dliocode/slowdown** - Gradual request slowdown on rate limit.
+    
+    <Card href="https://github.com/dliocode/horse-slowdown" icon="hourglass">
+      GitHub Repository
+    </Card>
+    
+    Supports: Delphi ✓ | Lazarus ✗
+  </Accordion>
+</AccordionGroup>
+
+### Documentation and API Tools
+
+<CardGroup cols={2}>
+  <Card title="GBSwagger" icon="book" href="https://github.com/gabrielbaltazar/gbswagger">
+    OpenAPI/Swagger documentation generation
+  </Card>
+  
+  <Card title="Horse Documentation" icon="file-code" href="https://github.com/weslleycapelari/horse-documentation">
+    API documentation generator
+  </Card>
+  
+  <Card title="Horse XMLDoc" icon="file-code" href="https://github.com/antoniojmsjr/Horse-XMLDoc">
+    XML documentation support
+  </Card>
+</CardGroup>
+
+### File Handling
+
+<CardGroup cols={2}>
+  <Card title="Upload" icon="upload" href="https://github.com/giorgiobazzo/horse-upload">
+    File upload handling
+  </Card>
+  
+  <Card title="Static Files" icon="folder-open" href="https://github.com/CarlosHe/horse-staticfiles">
+    Serve static files and assets
+  </Card>
+  
+  <Card title="Server Static" icon="server" href="https://github.com/CachopaWeb/horse-server-static">
+    Alternative static file server
+  </Card>
+</CardGroup>
+
+### Pagination and Data
+
+<CardGroup cols={2}>
+  <Card title="Paginate" icon="list" href="https://github.com/bittencourtthulio/Horse-Paginate">
+    Result pagination helper
+  </Card>
+  
+  <Card title="CSResponsePagination" icon="table" href="https://github.com/claudneysessa/Horse-CSResponsePagination">
+    Advanced pagination responses
+  </Card>
+  
+  <Card title="Query Parser" icon="magnifying-glass" href="https://github.com/dliocode/horse-query">
+    Query string parsing utilities
+  </Card>
+</CardGroup>
+
+### Monitoring and Logging
+
+<CardGroup cols={2}>
+  <Card title="Health Check" icon="heart-pulse" href="https://github.com/CarlosHe/horse-healthcheck">
+    Service health check endpoints
+  </Card>
+  
+  <Card title="Exception Logger" icon="bug" href="https://github.com/arvanus/horse-exception-logger">
+    Enhanced exception logging
+  </Card>
+  
+  <Card title="DataLogger" icon="database" href="https://github.com/dliocode/horse-datalogger">
+    Advanced request/response logging
+  </Card>
+  
+  <Card title="Prometheus Metrics" icon="chart-line" href="https://github.com/marcobreveglieri/horse-prometheus-metrics">
+    Prometheus monitoring integration
+  </Card>
+</CardGroup>
+
+### Real-time Communication
+
+<Card title="Socket.IO" icon="plug" href="https://github.com/WillHubner/Horse-SocketIO">
+  WebSocket and Socket.IO support for real-time features
+</Card>
+
+Supports: Delphi ✓ | Lazarus ✗
+
+### Advanced Features
+
+<AccordionGroup>
+  <Accordion title="Bearer Token Authentication">
+    **andre-djsystem/horse-bearer-auth** - Bearer token authentication.
+    
+    <Card href="https://github.com/andre-djsystem/horse-bearer-auth" icon="shield">
+      GitHub Repository
+    </Card>
+    
+    Supports: Delphi ✓ | Lazarus ✓
+  </Accordion>
+  
+  <Accordion title="Request Manipulation">
+    **andre-djsystem/horse-manipulate-request** - Modify incoming requests.
+    
+    <Card href="https://github.com/andre-djsystem/horse-manipulate-request" icon="arrows-rotate">
+      GitHub Repository
+    </Card>
+    
+    Supports: Delphi ✓ | Lazarus ✓
+  </Accordion>
+  
+  <Accordion title="Response Manipulation">
+    **andre-djsystem/horse-manipulate-response** - Modify outgoing responses.
+    
+    <Card href="https://github.com/andre-djsystem/horse-manipulate-response" icon="arrows-rotate">
+      GitHub Repository
+    </Card>
+    
+    Supports: Delphi ✓ | Lazarus ✓
+  </Accordion>
+  
+  <Accordion title="IP Geolocation">
+    **antoniojmsjr/Horse-IPGeoLocation** - IP-based geolocation.
+    
+    <Card href="https://github.com/antoniojmsjr/Horse-IPGeoLocation" icon="location-dot">
+      GitHub Repository
+    </Card>
+    
+    Supports: Delphi ✓ | Lazarus ✗
+  </Accordion>
+  
+  <Accordion title="JSON Extensions">
+    **isaquepinheiro/horse-jsonbr** - Enhanced JSON handling.
+    
+    <Card href="https://github.com/HashLoad/JSONBr" icon="brackets-curly">
+      GitHub Repository
+    </Card>
+    
+    Supports: Delphi ✓ | Lazarus ✗
+  </Accordion>
+  
+  <Accordion title="XSuperObjects Integration">
+    **claudneysessa/Horse-XSuperObjects** - XSuperObject JSON library integration.
+    
+    <Card href="https://github.com/claudneysessa/Horse-XSuperObjects" icon="code">
+      GitHub Repository
+    </Card>
+    
+    Supports: Delphi ✓ | Lazarus ✗
+  </Accordion>
+  
+  <Accordion title="JSON Interceptor">
+    **IagooCesaar/Horse-JsonInterceptor** - Intercept and transform JSON.
+    
+    <Card href="https://github.com/IagooCesaar/Horse-JsonInterceptor" icon="filter">
+      GitHub Repository
+    </Card>
+    
+    Supports: Delphi ✓ | Lazarus ✗
+  </Accordion>
+</AccordionGroup>
+
+## Community
+
+### Telegram Channel
+
+Join the official Horse community on Telegram for discussions, support, and updates.
+
+<Card title="Join Telegram Channel" icon="telegram" href="https://t.me/hashload">
+  Connect with other Horse developers
+</Card>
+
+### GitHub Organization
+
+All Horse projects are hosted under the HashLoad GitHub organization.
+
+<Card title="HashLoad on GitHub" icon="github" href="https://github.com/HashLoad">
+  Browse all Horse repositories and projects
+</Card>
+
+### Contributing a Middleware
+
+Have you created a middleware for Horse? Share it with the community!
+
+<Steps>
+  <Step title="Develop your middleware">
+    Create a useful middleware following Horse conventions and patterns.
+  </Step>
+  
+  <Step title="Publish on GitHub">
+    Open source your middleware with clear documentation and examples.
+  </Step>
+  
+  <Step title="Submit a PR">
+    Add your middleware to the README by submitting a pull request to the [Horse repository](https://github.com/HashLoad/horse).
+  </Step>
+  
+  <Step title="Share with community">
+    Announce your middleware in the Telegram channel to get feedback and users.
+  </Step>
+</Steps>
+
+<Note>
+Community middlewares are listed in the [Horse README](https://github.com/HashLoad/horse#-third-party-middlewares) with compatibility information.
+</Note>
+
+## Platform Support
+
+Horse and its official middlewares support:
+
+<Tabs>
+  <Tab title="Delphi">
+    - Delphi 13 Florence
+    - Delphi 12 Athens
+    - Delphi 11 Alexandria
+    - Delphi 10.4 Sydney
+    - Delphi 10.3 Rio
+    - Delphi 10.2 Tokyo
+    - Delphi 10.1 Berlin
+    - Delphi 10 Seattle
+    - Delphi XE8
+    - Delphi XE7
+  </Tab>
+  
+  <Tab title="Lazarus">
+    - Free Pascal Compiler 3.2.0+
+    - Lazarus IDE 2.0.0+
+    - Linux, Windows, and macOS support
+  </Tab>
+</Tabs>
+
+<Warning>
+Some community middlewares may only support Delphi. Check the compatibility table before installation.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Examples" href="/resources/examples" icon="code">
+    See real-world examples using middlewares
+  </Card>
+  
+  <Card title="Contributing" href="/resources/contributing" icon="handshake">
+    Learn how to contribute to Horse
+  </Card>
+</CardGroup>

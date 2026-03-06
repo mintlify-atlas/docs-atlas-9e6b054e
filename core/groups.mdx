@@ -1,0 +1,472 @@
+---
+title: Route Groups
+description: Organize routes with prefixes and shared middleware using Horse's grouping system
+---
+
+Route groups allow you to organize routes under a common prefix and apply shared middleware. This is perfect for versioning APIs, organizing admin routes, or applying authentication to multiple endpoints.
+
+## Basic Grouping
+
+Create a route group using the `Group()` method:
+
+```delphi
+THorse.Group
+  .Prefix('/api')
+  .Get('/users', GetUsersHandler)
+  .Post('/users', CreateUserHandler);
+```
+
+This creates routes at:
+- `GET /api/users`
+- `POST /api/users`
+
+## Group API
+
+The `IHorseCoreGroup` interface is defined in `Horse.Core.Group.pas` and provides these methods:
+
+### Prefix
+
+Set a prefix for all routes in the group:
+
+```delphi
+function Prefix(const APrefix: string): IHorseCoreGroup<T>;
+```
+
+**Example:**
+```delphi
+THorse.Group
+  .Prefix('/v1')
+  .Get('/users', Handler);
+// Creates: GET /v1/users
+```
+
+### HTTP Method Registration
+
+All standard HTTP methods are available:
+
+```delphi
+function Get(const APath: string; const ACallback: THorseCallback): IHorseCoreGroup<T>;
+function Post(const APath: string; const ACallback: THorseCallback): IHorseCoreGroup<T>;
+function Put(const APath: string; const ACallback: THorseCallback): IHorseCoreGroup<T>;
+function Delete(const APath: string; const ACallback: THorseCallback): IHorseCoreGroup<T>;
+function Patch(const APath: string; const ACallback: THorseCallback): IHorseCoreGroup<T>;
+function Head(const APath: string; const ACallback: THorseCallback): IHorseCoreGroup<T>;
+function All(const APath: string; const ACallback: THorseCallback): IHorseCoreGroup<T>;
+```
+
+### Middleware
+
+Apply middleware to all routes in the group:
+
+```delphi
+function Use(const ACallback: THorseCallback): IHorseCoreGroup<T>;
+function Use(const AMiddleware, ACallback: THorseCallback): IHorseCoreGroup<T>;
+function Use(const ACallbacks: array of THorseCallback): IHorseCoreGroup<T>;
+```
+
+### Route Method
+
+Define multiple HTTP methods for the same path:
+
+```delphi
+function Route(const APath: string): IHorseCoreRoute<T>;
+```
+
+### End Group
+
+Return to the main Horse instance:
+
+```delphi
+function &End: T;
+```
+
+## Creating Groups
+
+<Steps>
+  <Step title="Start with Group()">
+    Call `THorse.Group` to start a new group.
+  </Step>
+  
+  <Step title="Set a prefix">
+    Use `.Prefix()` to define the common path prefix.
+  </Step>
+  
+  <Step title="Add routes">
+    Chain `.Get()`, `.Post()`, etc. to add routes.
+  </Step>
+  
+  <Step title="Optionally end">
+    Call `.&End` to return to the main instance (optional in most cases).
+  </Step>
+</Steps>
+
+## Examples
+
+### API Versioning
+
+```delphi
+// Version 1 API
+THorse.Group
+  .Prefix('/api/v1')
+  .Get('/users', GetUsersV1)
+  .Get('/users/:id', GetUserV1)
+  .Post('/users', CreateUserV1);
+
+// Version 2 API
+THorse.Group
+  .Prefix('/api/v2')
+  .Get('/users', GetUsersV2)
+  .Get('/users/:id', GetUserV2)
+  .Post('/users', CreateUserV2);
+```
+
+### Admin Routes
+
+```delphi
+THorse.Group
+  .Prefix('/admin')
+  .Use(AuthMiddleware)  // Apply auth to all admin routes
+  .Get('/dashboard', DashboardHandler)
+  .Get('/users', AdminUsersHandler)
+  .Get('/settings', SettingsHandler)
+  .Post('/users/:id/ban', BanUserHandler);
+```
+
+### Resource-Based Grouping
+
+```delphi
+// Users resource
+THorse.Group
+  .Prefix('/users')
+  .Get('/', GetAllUsers)
+  .Post('/', CreateUser)
+  .Get('/:id', GetUser)
+  .Put('/:id', UpdateUser)
+  .Delete('/:id', DeleteUser);
+
+// Posts resource
+THorse.Group
+  .Prefix('/posts')
+  .Get('/', GetAllPosts)
+  .Post('/', CreatePost)
+  .Get('/:id', GetPost)
+  .Put('/:id', UpdatePost)
+  .Delete('/:id', DeletePost);
+```
+
+### Nested Groups
+
+You can organize routes with nested prefixes:
+
+```delphi
+// User posts
+THorse.Group
+  .Prefix('/users/:userId/posts')
+  .Get('/', GetUserPosts)
+  .Post('/', CreateUserPost)
+  .Get('/:postId', GetUserPost);
+
+// Creates:
+// GET /users/:userId/posts
+// POST /users/:userId/posts
+// GET /users/:userId/posts/:postId
+```
+
+### Using Route Method
+
+Define multiple HTTP methods for the same path:
+
+```delphi
+THorse.Group
+  .Prefix('/api')
+  .Route('/users')
+    .Get(GetUsers)
+    .Post(CreateUser)
+  .Route('/users/:id')
+    .Get(GetUser)
+    .Put(UpdateUser)
+    .Delete(DeleteUser);
+```
+
+## Complete Example
+
+```delphi
+program GroupExample;
+
+uses
+  Horse,
+  System.SysUtils,
+  System.JSON;
+
+// Middleware
+procedure AuthMiddleware(Req: THorseRequest; Res: THorseResponse; Next: TProc);
+var
+  LToken: string;
+begin
+  LToken := Req.Headers['Authorization'];
+  if LToken <> 'Bearer secret' then
+  begin
+    Res.Status(THTTPStatus.Unauthorized)
+       .Send('{"error": "Unauthorized"}');
+    Exit;
+  end;
+  Next();
+end;
+
+procedure LogMiddleware(Req: THorseRequest; Res: THorseResponse; Next: TProc);
+begin
+  Writeln(Format('[%s] %s', [DateTimeToStr(Now), Req.PathInfo]));
+  Next();
+end;
+
+// Public handlers
+procedure GetPublicInfo(Req: THorseRequest; Res: THorseResponse; Next: TProc);
+begin
+  Res.Send('{"message": "Public information"}');
+end;
+
+procedure Login(Req: THorseRequest; Res: THorseResponse; Next: TProc);
+begin
+  Res.Send('{"token": "secret"}');
+end;
+
+// User handlers
+procedure GetUsers(Req: THorseRequest; Res: THorseResponse; Next: TProc);
+var
+  LUsers: TJSONArray;
+begin
+  LUsers := TJSONArray.Create;
+  try
+    LUsers.Add(TJSONObject.Create.AddPair('id', '1').AddPair('name', 'John'));
+    LUsers.Add(TJSONObject.Create.AddPair('id', '2').AddPair('name', 'Jane'));
+    Res.Send(LUsers.ToString);
+  finally
+    LUsers.Free;
+  end;
+end;
+
+procedure GetUser(Req: THorseRequest; Res: THorseResponse; Next: TProc);
+var
+  LUserId: string;
+  LUser: TJSONObject;
+begin
+  LUserId := Req.Params['id'];
+  LUser := TJSONObject.Create;
+  try
+    LUser.AddPair('id', LUserId);
+    LUser.AddPair('name', 'User ' + LUserId);
+    Res.Send(LUser.ToString);
+  finally
+    LUser.Free;
+  end;
+end;
+
+procedure CreateUser(Req: THorseRequest; Res: THorseResponse; Next: TProc);
+var
+  LRequest: TJSONObject;
+  LName: string;
+begin
+  LRequest := TJSONObject.ParseJSONValue(Req.Body) as TJSONObject;
+  try
+    LName := LRequest.GetValue('name').Value;
+    Res.Status(THTTPStatus.Created)
+       .Send(Format('{"id": 3, "name": "%s"}', [LName]));
+  finally
+    LRequest.Free;
+  end;
+end;
+
+procedure UpdateUser(Req: THorseRequest; Res: THorseResponse; Next: TProc);
+var
+  LUserId: string;
+begin
+  LUserId := Req.Params['id'];
+  Res.Send(Format('{"message": "User %s updated"}', [LUserId]));
+end;
+
+procedure DeleteUser(Req: THorseRequest; Res: THorseResponse; Next: TProc);
+begin
+  Res.Status(THTTPStatus.NoContent).Send('');
+end;
+
+// Admin handlers
+procedure GetDashboard(Req: THorseRequest; Res: THorseResponse; Next: TProc);
+begin
+  Res.Send('{"totalUsers": 100, "activeUsers": 85}');
+end;
+
+procedure GetSettings(Req: THorseRequest; Res: THorseResponse; Next: TProc);
+begin
+  Res.Send('{"siteName": "My Site", "maintenance": false}');
+end;
+
+begin
+  // Global middleware
+  THorse.Use(LogMiddleware);
+  
+  // Public routes
+  THorse.Group
+    .Prefix('/public')
+    .Get('/info', GetPublicInfo)
+    .Post('/login', Login);
+  
+  // API v1 - Protected routes
+  THorse.Group
+    .Prefix('/api/v1')
+    .Use(AuthMiddleware)  // Require auth for all API routes
+    .Route('/users')
+      .Get(GetUsers)
+      .Post(CreateUser)
+    .Route('/users/:id')
+      .Get(GetUser)
+      .Put(UpdateUser)
+      .Delete(DeleteUser);
+  
+  // Admin routes - Protected
+  THorse.Group
+    .Prefix('/admin')
+    .Use([AuthMiddleware])  // Can also use array syntax
+    .Get('/dashboard', GetDashboard)
+    .Get('/settings', GetSettings);
+  
+  THorse.Listen(9000,
+    procedure
+    begin
+      Writeln('Server running on port 9000');
+      Writeln('');
+      Writeln('Public routes:');
+      Writeln('  GET  http://localhost:9000/public/info');
+      Writeln('  POST http://localhost:9000/public/login');
+      Writeln('');
+      Writeln('API routes (requires Authorization: Bearer secret):');
+      Writeln('  GET    http://localhost:9000/api/v1/users');
+      Writeln('  POST   http://localhost:9000/api/v1/users');
+      Writeln('  GET    http://localhost:9000/api/v1/users/:id');
+      Writeln('  PUT    http://localhost:9000/api/v1/users/:id');
+      Writeln('  DELETE http://localhost:9000/api/v1/users/:id');
+      Writeln('');
+      Writeln('Admin routes (requires Authorization: Bearer secret):');
+      Writeln('  GET http://localhost:9000/admin/dashboard');
+      Writeln('  GET http://localhost:9000/admin/settings');
+      Readln;
+    end);
+end.
+```
+
+## Modular Route Registration
+
+Organize groups in separate units:
+
+```delphi
+// UserRoutes.pas
+unit UserRoutes;
+
+interface
+
+uses Horse;
+
+procedure RegisterUserRoutes;
+
+implementation
+
+procedure GetUsers(Req: THorseRequest; Res: THorseResponse; Next: TProc);
+begin
+  // Implementation
+end;
+
+procedure CreateUser(Req: THorseRequest; Res: THorseResponse; Next: TProc);
+begin
+  // Implementation
+end;
+
+procedure RegisterUserRoutes;
+begin
+  THorse.Group
+    .Prefix('/api/users')
+    .Get('/', GetUsers)
+    .Post('/', CreateUser);
+end;
+
+end.
+```
+
+```delphi
+// Main program
+program API;
+
+uses
+  Horse,
+  UserRoutes,
+  PostRoutes,
+  AdminRoutes;
+
+begin
+  // Register all route modules
+  RegisterUserRoutes;
+  RegisterPostRoutes;
+  RegisterAdminRoutes;
+  
+  THorse.Listen(9000);
+end.
+```
+
+## Path Normalization
+
+Horse automatically normalizes paths in groups. The `NormalizePath` method in `Horse.Core.Group.pas:321` combines the prefix with the route path:
+
+```delphi
+function THorseCoreGroup<T>.NormalizePath(const APath: string): string;
+begin
+  Result := FPrefix + '/' + APath.Trim(['/']);
+end;
+```
+
+This means all these are equivalent:
+
+```delphi
+// All create the same route: /api/users
+THorse.Group.Prefix('/api').Get('/users', Handler);
+THorse.Group.Prefix('/api').Get('users', Handler);
+THorse.Group.Prefix('api').Get('/users', Handler);
+THorse.Group.Prefix('/api/').Get('/users/', Handler);
+```
+
+## Best Practices
+
+<Note>
+**Organize by resource or version:** Group related endpoints together, either by resource type (users, posts) or API version (v1, v2).
+</Note>
+
+<Note>
+**Apply middleware at group level:** Instead of repeating middleware for each route, apply it once to the entire group.
+</Note>
+
+<Note>
+**Use descriptive prefixes:** Make your API structure clear with prefixes like `/api/v1`, `/admin`, `/public`.
+</Note>
+
+<Note>
+**Separate into modules:** For large applications, define groups in separate units and register them in the main program.
+</Note>
+
+<Note>
+**Chain methods:** Take advantage of method chaining for cleaner, more readable route definitions.
+</Note>
+
+## Group Middleware Execution
+
+Middleware applied to groups executes before the route handlers:
+
+```delphi
+THorse.Use(GlobalMiddleware);  // 1. Executes first
+
+THorse.Group
+  .Prefix('/api')
+  .Use(GroupMiddleware)        // 2. Executes second (only for /api routes)
+  .Get('/users', Handler);     // 3. Executes last
+```
+
+Order of execution:
+1. Global middleware (from `THorse.Use`)
+2. Group middleware (from `Group.Use`)
+3. Route handler

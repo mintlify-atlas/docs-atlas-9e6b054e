@@ -1,0 +1,901 @@
+---
+title: Best Practices
+description: Production-ready patterns, tips, and recommendations for building robust Horse applications
+---
+
+# Best Practices
+
+This guide covers essential patterns and practices for building maintainable, secure, and performant Horse applications.
+
+## Project Structure
+
+Organize your Horse application with a clear, scalable structure.
+
+### Recommended Structure
+
+```
+MyHorseApp/
+├── src/
+│   ├── Controllers/
+│   │   ├── UserController.pas
+│   │   ├── ProductController.pas
+│   │   └── OrderController.pas
+│   ├── Middleware/
+│   │   ├── AuthMiddleware.pas
+│   │   ├── LoggerMiddleware.pas
+│   │   ├── CorsMiddleware.pas
+│   │   └── ErrorHandlerMiddleware.pas
+│   ├── Models/
+│   │   ├── User.pas
+│   │   ├── Product.pas
+│   │   └── Order.pas
+│   ├── Services/
+│   │   ├── UserService.pas
+│   │   ├── EmailService.pas
+│   │   └── AuthService.pas
+│   ├── Utils/
+│   │   ├── Validation.pas
+│   │   ├── Database.pas
+│   │   └── Config.pas
+│   └── Routes/
+│       ├── ApiRoutes.pas
+│       ├── UserRoutes.pas
+│       └── ProductRoutes.pas
+├── config/
+│   ├── app.config.json
+│   └── database.config.json
+├── tests/
+│   └── UserControllerTests.pas
+└── MyHorseApp.dpr
+```
+
+### Separating Routes
+
+<Accordion title="Routes Organization Pattern">
+
+**UserRoutes.pas:**
+```delphi
+unit UserRoutes;
+
+interface
+
+uses
+  Horse;
+
+procedure RegisterUserRoutes;
+
+implementation
+
+uses
+  UserController;
+
+procedure RegisterUserRoutes;
+begin
+  THorse.Group.Prefix('api/users')
+    .Get('/', TUserController.GetAll)
+    .Get('/:id', TUserController.GetById)
+    .Post('/', TUserController.Create)
+    .Put('/:id', TUserController.Update)
+    .Delete('/:id', TUserController.Delete);
+end;
+
+end.
+```
+
+**ProductRoutes.pas:**
+```delphi
+unit ProductRoutes;
+
+interface
+
+uses
+  Horse;
+
+procedure RegisterProductRoutes;
+
+implementation
+
+uses
+  ProductController, AuthMiddleware;
+
+procedure RegisterProductRoutes;
+begin
+  THorse.Group.Prefix('api/products')
+    .Get('/', TProductController.GetAll)
+    .Get('/:id', TProductController.GetById)
+    .Post('/', TProductController.Create)
+    .AddMiddleware(AuthMiddleware.RequireAuth)  // Protected routes
+    .Put('/:id', TProductController.Update)
+    .Delete('/:id', TProductController.Delete);
+end;
+
+end.
+```
+
+**Main Program:**
+```delphi
+program MyHorseApp;
+
+uses
+  Horse,
+  UserRoutes,
+  ProductRoutes,
+  ErrorHandlerMiddleware,
+  LoggerMiddleware;
+
+begin
+  // Global middleware
+  THorse.Use(ErrorHandlerMiddleware.Handler);
+  THorse.Use(LoggerMiddleware.Handler);
+  
+  // Register routes
+  UserRoutes.RegisterUserRoutes;
+  ProductRoutes.RegisterProductRoutes;
+  
+  THorse.Listen(9000);
+end.
+```
+
+</Accordion>
+
+## Controller Pattern
+
+Use classes to organize related endpoints and share common logic.
+
+```delphi
+unit UserController;
+
+interface
+
+uses
+  Horse, System.JSON;
+
+type
+  TUserController = class
+  public
+    class procedure GetAll(Req: THorseRequest; Res: THorseResponse; Next: TNextProc);
+    class procedure GetById(Req: THorseRequest; Res: THorseResponse; Next: TNextProc);
+    class procedure Create(Req: THorseRequest; Res: THorseResponse; Next: TNextProc);
+    class procedure Update(Req: THorseRequest; Res: THorseResponse; Next: TNextProc);
+    class procedure Delete(Req: THorseRequest; Res: THorseResponse; Next: TNextProc);
+  end;
+
+implementation
+
+uses
+  UserService, Validation, Horse.Exception;
+
+class procedure TUserController.GetAll(Req: THorseRequest; Res: THorseResponse; Next: TNextProc);
+var
+  LUsers: TJSONArray;
+begin
+  LUsers := TUserService.GetAllUsers;
+  try
+    Res.Send<TJSONArray>(LUsers);
+  except
+    LUsers.Free;
+    raise;
+  end;
+end;
+
+class procedure TUserController.GetById(Req: THorseRequest; Res: THorseResponse; Next: TNextProc);
+var
+  LUserId: Integer;
+  LUser: TJSONObject;
+begin
+  LUserId := StrToIntDef(Req.Params['id'], 0);
+  
+  if LUserId <= 0 then
+    raise EHorseException.New
+      .Error('Invalid user ID')
+      .Status(THTTPStatus.BadRequest);
+  
+  LUser := TUserService.GetUserById(LUserId);
+  if not Assigned(LUser) then
+    raise EHorseException.New
+      .Error('User not found')
+      .Status(THTTPStatus.NotFound);
+  
+  try
+    Res.Send<TJSONObject>(LUser);
+  except
+    LUser.Free;
+    raise;
+  end;
+end;
+
+class procedure TUserController.Create(Req: THorseRequest; Res: THorseResponse; Next: TNextProc);
+var
+  LJson: TJSONObject;
+  LUserId: Integer;
+begin
+  LJson := Req.Body<TJSONObject>;
+  
+  // Validate input
+  TValidator.RequireField(LJson, 'name');
+  TValidator.RequireField(LJson, 'email');
+  TValidator.RequireEmail(LJson.GetValue<string>('email'));
+  
+  LUserId := TUserService.CreateUser(LJson);
+  Res.Status(THTTPStatus.Created)
+     .Send(Format('{"id": %d, "message": "User created"}', [LUserId]));
+end;
+
+class procedure TUserController.Update(Req: THorseRequest; Res: THorseResponse; Next: TNextProc);
+var
+  LUserId: Integer;
+  LJson: TJSONObject;
+begin
+  LUserId := StrToIntDef(Req.Params['id'], 0);
+  LJson := Req.Body<TJSONObject>;
+  
+  if not TUserService.UserExists(LUserId) then
+    raise EHorseException.New
+      .Error('User not found')
+      .Status(THTTPStatus.NotFound);
+  
+  TUserService.UpdateUser(LUserId, LJson);
+  Res.Send('User updated');
+end;
+
+class procedure TUserController.Delete(Req: THorseRequest; Res: THorseResponse; Next: TNextProc);
+var
+  LUserId: Integer;
+begin
+  LUserId := StrToIntDef(Req.Params['id'], 0);
+  
+  if not TUserService.UserExists(LUserId) then
+    raise EHorseException.New
+      .Error('User not found')
+      .Status(THTTPStatus.NotFound);
+  
+  TUserService.DeleteUser(LUserId);
+  Res.Status(THTTPStatus.NoContent).Send('');
+end;
+
+end.
+```
+
+## Middleware Organization
+
+### Middleware Execution Order
+
+Middleware executes in the order it's added. Plan your middleware stack carefully:
+
+```delphi
+begin
+  // 1. Error handler (wraps everything)
+  THorse.Use(ErrorHandlerMiddleware);
+  
+  // 2. Logging (log all requests)
+  THorse.Use(LoggerMiddleware);
+  
+  // 3. CORS (before authentication)
+  THorse.Use(CorsMiddleware);
+  
+  // 4. Request parsing
+  THorse.Use(BodyParserMiddleware);
+  
+  // 5. Authentication (if needed globally)
+  // THorse.Use(AuthMiddleware);  // Or apply per-route
+  
+  // 6. Register routes
+  RegisterRoutes;
+  
+  THorse.Listen(9000);
+end.
+```
+
+<Note>
+**Execution Flow**: Request → Middleware 1 → Middleware 2 → ... → Route Handler → Response
+
+Each middleware can modify the request/response or stop the chain by not calling `Next()`.
+</Note>
+
+### Reusable Middleware
+
+```delphi
+unit CommonMiddleware;
+
+interface
+
+uses
+  Horse;
+
+type
+  TCommonMiddleware = class
+  public
+    class procedure RequireContentType(const AContentType: string): THorseCallback;
+    class procedure RateLimiter(ARequestsPerMinute: Integer): THorseCallback;
+    class procedure RequestId(Req: THorseRequest; Res: THorseResponse; Next: TNextProc);
+  end;
+
+implementation
+
+uses
+  System.SysUtils, System.Generics.Collections, Horse.Exception;
+
+class procedure TCommonMiddleware.RequestId(Req: THorseRequest; Res: THorseResponse; Next: TNextProc);
+var
+  LRequestId: string;
+begin
+  LRequestId := TGUID.NewGuid.ToString;
+  Res.AddHeader('X-Request-ID', LRequestId);
+  Next();
+end;
+
+class function TCommonMiddleware.RequireContentType(const AContentType: string): THorseCallback;
+begin
+  Result := procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  begin
+    if not Req.ContentType.Contains(AContentType) then
+      raise EHorseException.New
+        .Error(Format('Content-Type must be %s', [AContentType]))
+        .Status(THTTPStatus.UnsupportedMediaType);
+    Next();
+  end;
+end;
+
+class function TCommonMiddleware.RateLimiter(ARequestsPerMinute: Integer): THorseCallback;
+var
+  LRequestCounts: TDictionary<string, Integer>;
+  LResetTime: TDateTime;
+begin
+  LRequestCounts := TDictionary<string, Integer>.Create;
+  LResetTime := Now + OneMinute;
+  
+  Result := procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LClientIP: string;
+    LCount: Integer;
+  begin
+    // Reset counters every minute
+    if Now > LResetTime then
+    begin
+      LRequestCounts.Clear;
+      LResetTime := Now + OneMinute;
+    end;
+    
+    LClientIP := Req.Headers['X-Forwarded-For'];
+    if LClientIP = '' then
+      LClientIP := '127.0.0.1'; // Fallback
+    
+    if not LRequestCounts.TryGetValue(LClientIP, LCount) then
+      LCount := 0;
+    
+    Inc(LCount);
+    LRequestCounts.AddOrSetValue(LClientIP, LCount);
+    
+    if LCount > ARequestsPerMinute then
+      raise EHorseException.New
+        .Error('Rate limit exceeded')
+        .Status(THTTPStatus.TooManyRequests);
+    
+    Next();
+  end;
+end;
+
+end.
+```
+
+## Security Best Practices
+
+<Steps>
+
+<Step title="Validate all input">
+  Never trust client input. Validate everything:
+  
+  ```delphi
+  // Bad
+  LUserId := StrToInt(Req.Params['id']); // Can raise exception
+  
+  // Good
+  LUserId := StrToIntDef(Req.Params['id'], -1);
+  if LUserId <= 0 then
+    raise EHorseException.New.Error('Invalid ID').Status(THTTPStatus.BadRequest);
+  ```
+</Step>
+
+<Step title="Use parameterized queries">
+  Always use parameterized queries to prevent SQL injection:
+  
+  ```delphi
+  // Bad
+  LQuery.SQL.Text := 'SELECT * FROM users WHERE email = ' + QuotedStr(LEmail);
+  
+  // Good
+  LQuery.SQL.Text := 'SELECT * FROM users WHERE email = :email';
+  LQuery.ParamByName('email').AsString := LEmail;
+  ```
+</Step>
+
+<Step title="Implement authentication">
+  Use JWT tokens or session-based authentication:
+  
+  ```delphi
+  THorse.Group.Prefix('api')
+    .AddMiddleware(JWTMiddleware)
+    .Get('/profile', ProfileController.Get);
+  ```
+</Step>
+
+<Step title="Enable CORS carefully">
+  Don't use wildcard (`*`) origins in production:
+  
+  ```delphi
+  // Development only
+  THorse.Use(Jhonson);
+  THorse.Use(CORS);
+  
+  // Production
+  THorse.Use(CORS('https://yourdomain.com'));
+  ```
+</Step>
+
+<Step title="Hash passwords">
+  Never store plain-text passwords:
+  
+  ```delphi
+  uses
+    System.Hash;
+  
+  function HashPassword(const APassword: string): string;
+  begin
+    Result := THashSHA2.GetHashString(APassword);
+  end;
+  ```
+</Step>
+
+<Step title="Sanitize error messages">
+  Don't expose sensitive information:
+  
+  ```delphi
+  // Bad
+  raise Exception.Create('Database error: ' + E.Message); // Exposes DB details
+  
+  // Good
+  LogError(E.Message); // Log internally
+  raise EHorseException.New.Error('An error occurred').Status(500);
+  ```
+</Step>
+
+</Steps>
+
+<Warning>
+**Security Checklist**:
+- ✅ Validate and sanitize all input
+- ✅ Use HTTPS in production
+- ✅ Implement rate limiting
+- ✅ Use parameterized queries
+- ✅ Hash passwords with salt
+- ✅ Set secure HTTP headers
+- ✅ Validate file uploads
+- ✅ Implement proper authentication
+- ✅ Log security events
+- ✅ Keep dependencies updated
+</Warning>
+
+## Performance Optimization
+
+### Database Connections
+
+**Use connection pooling:**
+
+```delphi
+unit Database;
+
+interface
+
+uses
+  FireDAC.Comp.Client, System.SyncObjs;
+
+type
+  TDatabasePool = class
+  private
+    FPool: TThreadList<TFDConnection>;
+    FMaxConnections: Integer;
+    class var FInstance: TDatabasePool;
+  public
+    constructor Create(AMaxConnections: Integer);
+    destructor Destroy; override;
+    function GetConnection: TFDConnection;
+    procedure ReleaseConnection(AConnection: TFDConnection);
+    class function Instance: TDatabasePool;
+  end;
+
+implementation
+
+constructor TDatabasePool.Create(AMaxConnections: Integer);
+begin
+  FMaxConnections := AMaxConnections;
+  FPool := TThreadList<TFDConnection>.Create;
+end;
+
+destructor TDatabasePool.Destroy;
+var
+  LList: TList<TFDConnection>;
+  LConn: TFDConnection;
+begin
+  LList := FPool.LockList;
+  try
+    for LConn in LList do
+      LConn.Free;
+    LList.Clear;
+  finally
+    FPool.UnlockList;
+  end;
+  FPool.Free;
+  inherited;
+end;
+
+function TDatabasePool.GetConnection: TFDConnection;
+var
+  LList: TList<TFDConnection>;
+begin
+  LList := FPool.LockList;
+  try
+    if LList.Count > 0 then
+    begin
+      Result := LList.Last;
+      LList.Delete(LList.Count - 1);
+    end
+    else
+      Result := CreateNewConnection; // Your connection factory
+  finally
+    FPool.UnlockList;
+  end;
+end;
+
+procedure TDatabasePool.ReleaseConnection(AConnection: TFDConnection);
+begin
+  FPool.Add(AConnection);
+end;
+
+class function TDatabasePool.Instance: TDatabasePool;
+begin
+  if not Assigned(FInstance) then
+    FInstance := TDatabasePool.Create(10); // Max 10 connections
+  Result := FInstance;
+end;
+
+end.
+```
+
+### Response Caching
+
+```delphi
+procedure CacheMiddleware(Req: THorseRequest; Res: THorseResponse; Next: TNextProc);
+var
+  LCacheKey: string;
+  LCachedValue: string;
+begin
+  LCacheKey := Req.PathInfo + Req.Query.ToString;
+  
+  // Check cache
+  if TCache.TryGetValue(LCacheKey, LCachedValue) then
+  begin
+    Res.AddHeader('X-Cache', 'HIT')
+       .Send(LCachedValue);
+    Exit;
+  end;
+  
+  // Store original Send method
+  // ... (intercept and cache response)
+  
+  Next();
+end;
+```
+
+### Minimize Memory Allocations
+
+```delphi
+// Bad: Creates multiple string instances
+LResult := 'Hello' + ' ' + LName + '!';
+
+// Good: Use TStringBuilder for multiple concatenations
+var
+  LBuilder: TStringBuilder;
+begin
+  LBuilder := TStringBuilder.Create;
+  try
+    LBuilder.Append('Hello ');
+    LBuilder.Append(LName);
+    LBuilder.Append('!');
+    Result := LBuilder.ToString;
+  finally
+    LBuilder.Free;
+  end;
+end;
+```
+
+## Error Handling Standards
+
+### Consistent Error Format
+
+```delphi
+type
+  TApiError = record
+    Success: Boolean;
+    ErrorCode: string;
+    Message: string;
+    Details: TArray<string>;
+    function ToJSON: string;
+  end;
+
+function TApiError.ToJSON: string;
+var
+  LJson: TJSONObject;
+  LDetailsArray: TJSONArray;
+  LDetail: string;
+begin
+  LJson := TJSONObject.Create;
+  try
+    LJson.AddPair('success', TJSONBool.Create(Success));
+    LJson.AddPair('errorCode', ErrorCode);
+    LJson.AddPair('message', Message);
+    
+    if Length(Details) > 0 then
+    begin
+      LDetailsArray := TJSONArray.Create;
+      for LDetail in Details do
+        LDetailsArray.Add(LDetail);
+      LJson.AddPair('details', LDetailsArray);
+    end;
+    
+    Result := LJson.ToJSON;
+  finally
+    LJson.Free;
+  end;
+end;
+```
+
+## Configuration Management
+
+```delphi
+unit AppConfig;
+
+interface
+
+type
+  TAppConfig = class
+  private
+    FDatabaseHost: string;
+    FDatabasePort: Integer;
+    FServerPort: Integer;
+    FJWTSecret: string;
+    class var FInstance: TAppConfig;
+  public
+    procedure LoadFromFile(const AFileName: string);
+    property DatabaseHost: string read FDatabaseHost;
+    property DatabasePort: Integer read FDatabasePort;
+    property ServerPort: Integer read FServerPort;
+    property JWTSecret: string read FJWTSecret;
+    class function Instance: TAppConfig;
+  end;
+
+implementation
+
+uses
+  System.JSON, System.IOUtils;
+
+procedure TAppConfig.LoadFromFile(const AFileName: string);
+var
+  LJson: TJSONObject;
+  LContent: string;
+begin
+  LContent := TFile.ReadAllText(AFileName);
+  LJson := TJSONObject.ParseJSONValue(LContent) as TJSONObject;
+  try
+    FDatabaseHost := LJson.GetValue<string>('database.host');
+    FDatabasePort := LJson.GetValue<Integer>('database.port');
+    FServerPort := LJson.GetValue<Integer>('server.port');
+    FJWTSecret := LJson.GetValue<string>('security.jwtSecret');
+  finally
+    LJson.Free;
+  end;
+end;
+
+class function TAppConfig.Instance: TAppConfig;
+begin
+  if not Assigned(FInstance) then
+  begin
+    FInstance := TAppConfig.Create;
+    FInstance.LoadFromFile('config/app.config.json');
+  end;
+  Result := FInstance;
+end;
+
+end.
+```
+
+## Testing
+
+### Unit Testing Routes
+
+```delphi
+unit UserControllerTests;
+
+interface
+
+uses
+  DUnitX.TestFramework, Horse;
+
+type
+  [TestFixture]
+  TUserControllerTests = class
+  public
+    [Setup]
+    procedure Setup;
+    [TearDown]
+    procedure TearDown;
+    [Test]
+    procedure TestGetAllUsers;
+    [Test]
+    procedure TestGetUserById_ValidId;
+    [Test]
+    procedure TestGetUserById_InvalidId;
+    [Test]
+    procedure TestCreateUser_Success;
+    [Test]
+    procedure TestCreateUser_InvalidData;
+  end;
+
+implementation
+
+uses
+  UserController, System.JSON;
+
+procedure TUserControllerTests.Setup;
+begin
+  // Initialize test database
+end;
+
+procedure TUserControllerTests.TearDown;
+begin
+  // Cleanup
+end;
+
+procedure TUserControllerTests.TestGetAllUsers;
+var
+  LReq: THorseRequest;
+  LRes: THorseResponse;
+begin
+  // Create mock request/response
+  // Call controller method
+  // Assert results
+  Assert.IsNotNull(LRes);
+end;
+
+end.
+```
+
+## Logging Best Practices
+
+```delphi
+unit Logger;
+
+interface
+
+type
+  TLogLevel = (llDebug, llInfo, llWarning, llError);
+  
+  TLogger = class
+  public
+    class procedure Log(ALevel: TLogLevel; const AMessage: string);
+    class procedure Debug(const AMessage: string);
+    class procedure Info(const AMessage: string);
+    class procedure Warning(const AMessage: string);
+    class procedure Error(const AMessage: string);
+    class procedure LogRequest(Req: THorseRequest; Res: THorseResponse);
+  end;
+
+implementation
+
+uses
+  System.SysUtils, System.IOUtils;
+
+class procedure TLogger.Log(ALevel: TLogLevel; const AMessage: string);
+var
+  LLogEntry: string;
+  LLevelStr: string;
+begin
+  case ALevel of
+    llDebug: LLevelStr := 'DEBUG';
+    llInfo: LLevelStr := 'INFO';
+    llWarning: LLevelStr := 'WARNING';
+    llError: LLevelStr := 'ERROR';
+  end;
+  
+  LLogEntry := Format('[%s] [%s] %s',
+    [FormatDateTime('yyyy-mm-dd hh:nn:ss', Now), LLevelStr, AMessage]);
+  
+  // Write to file or logging service
+  TFile.AppendAllText('logs/app.log', LLogEntry + sLineBreak);
+end;
+
+class procedure TLogger.LogRequest(Req: THorseRequest; Res: THorseResponse);
+begin
+  Info(Format('%s %s - Status: %d',
+    [Req.MethodType.ToString, Req.PathInfo, Res.Status]));
+end;
+
+class procedure TLogger.Debug(const AMessage: string);
+begin
+  Log(llDebug, AMessage);
+end;
+
+class procedure TLogger.Info(const AMessage: string);
+begin
+  Log(llInfo, AMessage);
+end;
+
+class procedure TLogger.Warning(const AMessage: string);
+begin
+  Log(llWarning, AMessage);
+end;
+
+class procedure TLogger.Error(const AMessage: string);
+begin
+  Log(llError, AMessage);
+end;
+
+end.
+```
+
+## Production Deployment
+
+<Tip>
+**Production Checklist**:
+
+1. ✅ Enable HTTPS/SSL
+2. ✅ Set appropriate timeout values
+3. ✅ Configure connection pooling
+4. ✅ Enable compression
+5. ✅ Set up logging and monitoring
+6. ✅ Implement health check endpoint
+7. ✅ Configure CORS properly
+8. ✅ Use environment variables for secrets
+9. ✅ Set up automated backups
+10. ✅ Implement graceful shutdown
+</Tip>
+
+### Health Check Endpoint
+
+```delphi
+THorse.Get('/health',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LHealth: TJSONObject;
+  begin
+    LHealth := TJSONObject.Create;
+    try
+      LHealth.AddPair('status', 'healthy');
+      LHealth.AddPair('timestamp', FormatDateTime('yyyy-mm-dd hh:nn:ss', Now));
+      LHealth.AddPair('uptime', GetUptime);
+      LHealth.AddPair('database', CheckDatabaseConnection);
+      Res.Send<TJSONObject>(LHealth);
+    except
+      LHealth.Free;
+      raise;
+    end;
+  end);
+```
+
+---
+
+## Summary
+
+Following these best practices will help you build:
+
+- **Maintainable**: Clear structure and separation of concerns
+- **Secure**: Proper validation and error handling
+- **Performant**: Optimized database access and caching
+- **Reliable**: Comprehensive testing and logging
+- **Scalable**: Connection pooling and resource management
+
+## Related Topics
+
+- [Error Handling](/advanced/error-handling) - Exception handling patterns
+- [Session Management](/advanced/sessions) - Managing user sessions
+- [Middleware](/core/middleware) - Creating middleware
+- [File Handling](/advanced/file-handling) - Working with files

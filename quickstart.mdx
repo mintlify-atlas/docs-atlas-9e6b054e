@@ -1,80 +1,418 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Get your first Horse web server running in minutes
 ---
 
-## Get started in three steps
+# Quick Start Guide
 
-Get your documentation site running locally and make your first customization.
+Get your first Horse web server up and running in just a few minutes. This guide will walk you through creating a simple REST API.
 
-### Step 1: Set up your local environment
+## Prerequisites
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+Before you begin, ensure you have:
+
+- Delphi XE7 or later, OR Lazarus/Free Pascal
+- [Boss](https://github.com/HashLoad/boss) package manager (recommended)
+- Basic knowledge of Delphi/Pascal
+
+## Installation
+
+<Steps>
+  <Step title="Install Horse via Boss">
+    The easiest way to install Horse is using Boss:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    ```bash
+    boss install horse
+    ```
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    <Note>
+      Don't have Boss? See the [Installation Guide](/installation) for alternative methods.
+    </Note>
+  </Step>
+  
+  <Step title="Add Horse to your project">
+    In your uses clause, add:
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```delphi
+    uses
+      Horse;
+    ```
+  </Step>
+</Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+## Your First Server (Delphi)
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+Create a new console application and add this code:
 
-### Step 3: Go live
+```delphi Console.dpr
+program Console;
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+{$APPTYPE CONSOLE}
 
-## Next steps
+uses
+  Horse,
+  System.SysUtils;
 
-Now that you have your docs running, explore these key features:
+begin
+  THorse.Get('/ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong');
+    end);
 
-<CardGroup cols={2}>
+  THorse.Listen(9000,
+    procedure
+    begin
+      Writeln(Format('Server is running on %s:%d', [THorse.Host, THorse.Port]));
+      Readln;
+    end);
+end.
+```
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+<Steps>
+  <Step title="Compile and run">
+    Press F9 to compile and run your application.
+  </Step>
+  
+  <Step title="Test your server">
+    Open a browser or use curl:
+    
+    ```bash
+    curl http://localhost:9000/ping
+    ```
+    
+    You should see:
+    ```
+    pong
+    ```
+  </Step>
+</Steps>
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+## Your First Server (Lazarus)
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+For Lazarus/Free Pascal, use this code:
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+```pascal Console.lpr
+program Console;
 
-</CardGroup>
+{$MODE DELPHI}{$H+}
+
+uses
+  Horse;
+
+procedure GetPing(Req: THorseRequest; Res: THorseResponse);
+begin
+  Res.Send('pong');
+end;
+
+begin
+  THorse.Get('/ping', GetPing);
+  THorse.Listen(9000);
+end.
+```
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  Lazarus requires the `{$MODE DELPHI}{$H+}` directive for compatibility.
 </Note>
+
+## Building a REST API
+
+Let's expand our server into a simple REST API for managing users:
+
+```delphi
+program UserAPI;
+
+{$APPTYPE CONSOLE}
+
+uses
+  Horse,
+  System.SysUtils,
+  System.JSON;
+
+begin
+  // GET - Retrieve a user
+  THorse.Get('/users/:id',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    var
+      UserId: string;
+      JsonResponse: TJSONObject;
+    begin
+      UserId := Req.Params['id'];
+      
+      JsonResponse := TJSONObject.Create;
+      try
+        JsonResponse.AddPair('id', UserId);
+        JsonResponse.AddPair('name', 'John Doe');
+        JsonResponse.AddPair('email', 'john@example.com');
+        
+        Res.Send(JsonResponse.ToString);
+      finally
+        JsonResponse.Free;
+      end;
+    end);
+
+  // POST - Create a user
+  THorse.Post('/users',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    var
+      JsonRequest: TJSONObject;
+      Name, Email: string;
+    begin
+      JsonRequest := TJSONObject.ParseJSONValue(Req.Body) as TJSONObject;
+      try
+        Name := JsonRequest.GetValue<string>('name');
+        Email := JsonRequest.GetValue<string>('email');
+        
+        Res.Status(201).Send(Format('{"message": "User %s created"}', [Name]));
+      finally
+        JsonRequest.Free;
+      end;
+    end);
+
+  // PUT - Update a user
+  THorse.Put('/users/:id',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    var
+      UserId: string;
+    begin
+      UserId := Req.Params['id'];
+      Res.Send(Format('{"message": "User %s updated"}', [UserId]));
+    end);
+
+  // DELETE - Remove a user
+  THorse.Delete('/users/:id',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    var
+      UserId: string;
+    begin
+      UserId := Req.Params['id'];
+      Res.Status(204).Send('');
+    end);
+
+  THorse.Listen(9000,
+    procedure
+    begin
+      Writeln('User API running on port 9000');
+      Readln;
+    end);
+end.
+```
+
+## Working with Query Parameters
+
+Access query parameters from the URL:
+
+```delphi
+THorse.Get('/search',
+  procedure(Req: THorseRequest; Res: THorseResponse)
+  var
+    Query, Page: string;
+  begin
+    Query := Req.Query['q'];
+    Page := Req.Query['page'];
+    
+    Res.Send(Format('Searching for "%s" on page %s', [Query, Page]));
+  end);
+
+// Test: GET /search?q=delphi&page=1
+```
+
+## Working with Headers
+
+Read and set HTTP headers:
+
+```delphi
+THorse.Get('/headers',
+  procedure(Req: THorseRequest; Res: THorseResponse)
+  var
+    UserAgent, ContentType: string;
+  begin
+    // Read request headers
+    UserAgent := Req.Headers['User-Agent'];
+    ContentType := Req.ContentType;
+    
+    // Set response headers
+    Res
+      .AddHeader('X-Custom-Header', 'MyValue')
+      .ContentType('application/json')
+      .Send('{"userAgent": "' + UserAgent + '"}');
+  end);
+```
+
+## Setting Status Codes
+
+Control HTTP response status codes:
+
+```delphi
+THorse.Get('/resource/:id',
+  procedure(Req: THorseRequest; Res: THorseResponse)
+  var
+    ResourceId: string;
+  begin
+    ResourceId := Req.Params['id'];
+    
+    if ResourceId = '404' then
+      Res.Status(404).Send('{"error": "Not found"}')
+    else if ResourceId = 'error' then
+      Res.Status(500).Send('{"error": "Internal server error"}')
+    else
+      Res.Status(200).Send('{"id": "' + ResourceId + '"}');
+  end);
+```
+
+## Using Status Enums
+
+Horse provides status code enums for better readability:
+
+```delphi
+THorse.Post('/resource',
+  procedure(Req: THorseRequest; Res: THorseResponse)
+  begin
+    // Create resource logic here
+    Res.Status(THTTPStatus.Created).Send('{"message": "Created"}');
+  end);
+
+THorse.Get('/unauthorized',
+  procedure(Req: THorseRequest; Res: THorseResponse)
+  begin
+    Res.Status(THTTPStatus.Unauthorized).Send('{"error": "Unauthorized"}');
+  end);
+```
+
+## VCL Application Example
+
+Run Horse within a VCL application:
+
+```delphi Main.Form.pas
+unit Main.Form;
+
+interface
+
+uses
+  Winapi.Windows, System.Variants, System.Classes, Vcl.Graphics,
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.Buttons,
+  System.SysUtils;
+
+type
+  TFrmMain = class(TForm)
+    btnStart: TBitBtn;
+    btnStop: TBitBtn;
+    edtPort: TEdit;
+    Label1: TLabel;
+    procedure btnStartClick(Sender: TObject);
+    procedure btnStopClick(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
+    procedure FormClose(Sender: TObject; var Action: TCloseAction);
+  end;
+
+var
+  FrmMain: TFrmMain;
+
+implementation
+
+uses Horse;
+
+{$R *.dfm}
+
+procedure TFrmMain.FormCreate(Sender: TObject);
+begin
+  // Define routes
+  THorse.Get('ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong');
+    end);
+end;
+
+procedure TFrmMain.btnStartClick(Sender: TObject);
+begin
+  // Start server on specified port
+  THorse.Listen(StrToInt(edtPort.Text));
+  btnStart.Enabled := False;
+  btnStop.Enabled := True;
+  edtPort.Enabled := False;
+end;
+
+procedure TFrmMain.btnStopClick(Sender: TObject);
+begin
+  // Stop server
+  THorse.StopListen;
+  btnStart.Enabled := True;
+  btnStop.Enabled := False;
+  edtPort.Enabled := True;
+end;
+
+procedure TFrmMain.FormClose(Sender: TObject; var Action: TCloseAction);
+begin
+  if THorse.IsRunning then
+    THorse.StopListen;
+end;
+
+end.
+```
+
+<Warning>
+  When using Horse in VCL applications, you must define the `HORSE_VCL` compilation directive in your project options.
+</Warning>
+
+## Next Steps
+
+Now that you have a basic Horse server running, explore these topics:
+
+<CardGroup cols={2}>
+  <Card title="Routing" icon="route" href="/core/routing">
+    Learn advanced routing patterns and parameter handling
+  </Card>
+  <Card title="Middleware" icon="layer-group" href="/core/middleware">
+    Extend functionality with middleware
+  </Card>
+  <Card title="JSON Handling" icon="code" href="/api/middlewares/official#horse-json">
+    Work with JSON requests and responses
+  </Card>
+  <Card title="Deployment" icon="server" href="/deployment/console">
+    Deploy as Windows Service, ISAPI, or Apache module
+  </Card>
+</CardGroup>
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Port already in use">
+    If you get a "port already in use" error:
+    
+    1. Check if another application is using the port
+    2. Change the port number in `THorse.Listen()`
+    3. On Windows, use `netstat -ano | findstr :9000` to find the process
+  </Accordion>
+  
+  <Accordion title="Access violation on shutdown">
+    Always call `THorse.StopListen` before your application terminates:
+    
+    ```delphi
+    if THorse.IsRunning then
+      THorse.StopListen;
+    ```
+  </Accordion>
+  
+  <Accordion title="Middleware not working">
+    Ensure middleware is registered **before** route definitions:
+    
+    ```delphi
+    THorse.Use(Middleware); // Register first
+    THorse.Get('/route', Handler); // Then define routes
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Example Projects
+
+Explore complete example projects in the Horse repository:
+
+- Console application
+- VCL application
+- Windows Service
+- ISAPI module
+- Apache module
+- Lazarus daemon
+
+Find them at: [github.com/HashLoad/horse/tree/master/samples](https://github.com/HashLoad/horse/tree/master/samples)

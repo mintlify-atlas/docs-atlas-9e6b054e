@@ -1,0 +1,590 @@
+---
+title: File Handling
+description: Upload, download, and serve files with Horse's comprehensive file handling API
+---
+
+# File Handling
+
+Horse provides powerful and flexible file handling capabilities, including file uploads, downloads, and serving static content. This guide covers everything from basic file operations to advanced use cases.
+
+## Sending Files
+
+Horse offers several methods for sending files to clients, each suited to different scenarios.
+
+### SendFile()
+
+The `SendFile()` method sends a file to the client for inline display (e.g., images, PDFs in browser).
+
+#### From File Path
+
+```delphi
+THorse.Get('/images/:filename',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LFileName: string;
+  begin
+    LFileName := Req.Params['filename'];
+    Res.SendFile('C:\images\' + LFileName);
+  end);
+```
+
+#### From Stream
+
+```delphi
+THorse.Get('/document',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LStream: TMemoryStream;
+  begin
+    LStream := TMemoryStream.Create;
+    try
+      // Generate or load content into stream
+      LoadDocumentIntoStream(LStream);
+      
+      Res.SendFile(LStream, 'document.pdf', 'application/pdf');
+    except
+      LStream.Free;
+      raise;
+    end;
+    // Don't free the stream - Horse manages it
+  end);
+```
+
+<Warning>
+When passing a stream to `SendFile()`, Horse takes ownership of the stream and will free it automatically. Do not manually free the stream after calling `SendFile()`.
+</Warning>
+
+#### Method Signatures
+
+```delphi
+function SendFile(const AFileName: string; const AContentType: string = ''): THorseResponse;
+function SendFile(const AFileStream: TStream; const AFileName: string = ''; const AContentType: string = ''): THorseResponse;
+```
+
+**Parameters:**
+- `AFileName`: File path or display name
+- `AFileStream`: Stream containing file data
+- `AContentType`: MIME type (optional, auto-detected if not provided)
+
+### Download()
+
+The `Download()` method forces the browser to download the file rather than displaying it inline.
+
+```delphi
+THorse.Get('/reports/:id/download',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LReportId: string;
+    LFilePath: string;
+  begin
+    LReportId := Req.Params['id'];
+    LFilePath := Format('C:\reports\report_%s.pdf', [LReportId]);
+    
+    if FileExists(LFilePath) then
+      Res.Download(LFilePath)
+    else
+      Res.Status(THTTPStatus.NotFound).Send('Report not found');
+  end);
+```
+
+#### Download from Stream
+
+```delphi
+THorse.Get('/export/users',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LStream: TMemoryStream;
+  begin
+    LStream := TMemoryStream.Create;
+    try
+      // Generate CSV data
+      GenerateUserCSV(LStream);
+      
+      Res.Download(LStream, 'users.csv', 'text/csv');
+    except
+      LStream.Free;
+      raise;
+    end;
+  end);
+```
+
+#### Method Signatures
+
+```delphi
+function Download(const AFileName: string; const AContentType: string = ''): THorseResponse;
+function Download(const AFileStream: TStream; const AFileName: string; const AContentType: string = ''): THorseResponse;
+```
+
+<Note>
+The difference between `SendFile()` and `Download()` is the `Content-Disposition` header:
+- `SendFile()` sets: `inline; filename="..."`
+- `Download()` sets: `attachment; filename="..."`
+</Note>
+
+### Render()
+
+The `Render()` method is specifically designed for serving HTML files.
+
+```delphi
+THorse.Get('/',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  begin
+    Res.Render('C:\www\index.html');
+  end);
+```
+
+#### Render from Stream
+
+```delphi
+THorse.Get('/dynamic-page',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LStream: TStringStream;
+    LHtml: string;
+  begin
+    LStream := TStringStream.Create;
+    try
+      LHtml := '<html><body><h1>Dynamic Content</h1></body></html>';
+      LStream.WriteString(LHtml);
+      LStream.Position := 0;
+      
+      Res.Render(LStream, 'dynamic.html');
+    except
+      LStream.Free;
+      raise;
+    end;
+  end);
+```
+
+#### Method Signatures
+
+```delphi
+function Render(const AFileName: string): THorseResponse;
+function Render(const AFileStream: TStream; const AFileName: string): THorseResponse;
+```
+
+<Tip>
+`Render()` automatically sets the content type to `text/html`. It's equivalent to calling `SendFile()` with `TMimeTypes.TextHTML.ToString`.
+</Tip>
+
+## File Uploads
+
+Horse handles file uploads through the `ContentFields` property, which processes both `multipart/form-data` and `application/x-www-form-urlencoded` requests.
+
+### Single File Upload
+
+```delphi
+THorse.Post('/upload',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LFile: TStream;
+    LFileName: string;
+    LFileStream: TFileStream;
+  begin
+    // Get uploaded file from form field
+    if Req.ContentFields.TryGetValue('file', LFile) then
+    begin
+      LFileName := 'C:\uploads\' + FormatDateTime('yyyymmddhhnnss', Now) + '.dat';
+      
+      LFileStream := TFileStream.Create(LFileName, fmCreate);
+      try
+        LFile.Position := 0;
+        LFileStream.CopyFrom(LFile, LFile.Size);
+        Res.Send('File uploaded successfully');
+      finally
+        LFileStream.Free;
+      end;
+    end
+    else
+      Res.Status(THTTPStatus.BadRequest).Send('No file provided');
+  end);
+```
+
+### Multiple File Upload
+
+```delphi
+THorse.Post('/upload/multiple',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    I: Integer;
+    LFile: TStream;
+    LFileName: string;
+    LFileStream: TFileStream;
+    LCount: Integer;
+  begin
+    LCount := 0;
+    
+    // ContentFields contains both regular fields and uploaded files
+    for I := 0 to Pred(Req.RawWebRequest.Files.Count) do
+    begin
+      LFile := Req.RawWebRequest.Files[I].Stream;
+      LFileName := Format('C:\uploads\%s_%s',
+        [FormatDateTime('yyyymmddhhnnss', Now),
+         Req.RawWebRequest.Files[I].FieldName]);
+      
+      LFileStream := TFileStream.Create(LFileName, fmCreate);
+      try
+        LFile.Position := 0;
+        LFileStream.CopyFrom(LFile, LFile.Size);
+        Inc(LCount);
+      finally
+        LFileStream.Free;
+      end;
+    end;
+    
+    Res.Send(Format('%d files uploaded successfully', [LCount]));
+  end);
+```
+
+### File Upload with Metadata
+
+```delphi
+THorse.Post('/upload/document',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LFile: TStream;
+    LTitle, LDescription: string;
+    LFileName: string;
+  begin
+    // Get form fields
+    LTitle := Req.ContentFields['title'];
+    LDescription := Req.ContentFields['description'];
+    
+    // Get file
+    if Req.ContentFields.TryGetValue('document', LFile) then
+    begin
+      LFileName := SaveUploadedFile(LFile, LTitle, LDescription);
+      Res.Send('Document uploaded: ' + LFileName);
+    end
+    else
+      Res.Status(THTTPStatus.BadRequest).Send('No document provided');
+  end);
+```
+
+<Note>
+The `ContentFields` property automatically handles:
+- Parsing `multipart/form-data` requests
+- Parsing `application/x-www-form-urlencoded` requests
+- Both file streams and regular form fields
+</Note>
+
+## ContentFields API
+
+The `ContentFields` property provides access to form data and uploaded files.
+
+### Accessing Form Fields
+
+```delphi
+THorse.Post('/submit',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LName, LEmail: string;
+  begin
+    LName := Req.ContentFields['name'];
+    LEmail := Req.ContentFields['email'];
+    
+    Res.Send(Format('Received: %s (%s)', [LName, LEmail]));
+  end);
+```
+
+### Safe Field Access
+
+```delphi
+THorse.Post('/form',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LValue: string;
+  begin
+    if Req.ContentFields.ContainsKey('username') then
+    begin
+      LValue := Req.ContentFields['username'];
+      Res.Send('Username: ' + LValue);
+    end
+    else
+      Res.Status(THTTPStatus.BadRequest).Send('Username is required');
+  end);
+```
+
+### Accessing File Streams
+
+```delphi
+var
+  LFile: TStream;
+begin
+  if Req.ContentFields.TryGetValue('avatar', LFile) then
+  begin
+    // LFile is a TStream containing the uploaded file
+    // Process the file...
+  end;
+end;
+```
+
+## Advanced File Handling
+
+### File Validation
+
+<Accordion title="Complete File Validation Example">
+
+```delphi
+unit MyApp.FileValidation;
+
+interface
+
+uses
+  System.Classes, System.SysUtils;
+
+type
+  TFileValidator = class
+  public
+    class function ValidateImageFile(AStream: TStream; out AError: string): Boolean;
+    class function ValidateFileSize(AStream: TStream; AMaxSizeBytes: Int64; out AError: string): Boolean;
+    class function ValidateFileExtension(const AFileName: string; const AAllowed: array of string; out AError: string): Boolean;
+  end;
+
+implementation
+
+class function TFileValidator.ValidateFileSize(AStream: TStream; AMaxSizeBytes: Int64; out AError: string): Boolean;
+begin
+  Result := AStream.Size <= AMaxSizeBytes;
+  if not Result then
+    AError := Format('File size exceeds maximum of %d bytes', [AMaxSizeBytes]);
+end;
+
+class function TFileValidator.ValidateFileExtension(const AFileName: string; const AAllowed: array of string; out AError: string): Boolean;
+var
+  LExt: string;
+  LAllowedExt: string;
+begin
+  LExt := LowerCase(ExtractFileExt(AFileName));
+  Result := False;
+  
+  for LAllowedExt in AAllowed do
+  begin
+    if LExt = LowerCase(LAllowedExt) then
+    begin
+      Result := True;
+      Break;
+    end;
+  end;
+  
+  if not Result then
+    AError := 'File extension not allowed';
+end;
+
+class function TFileValidator.ValidateImageFile(AStream: TStream; out AError: string): Boolean;
+var
+  LBuffer: array[0..3] of Byte;
+  LBytesRead: Integer;
+begin
+  Result := False;
+  AError := '';
+  
+  if AStream.Size < 4 then
+  begin
+    AError := 'Invalid file format';
+    Exit;
+  end;
+  
+  AStream.Position := 0;
+  LBytesRead := AStream.Read(LBuffer, 4);
+  AStream.Position := 0;
+  
+  if LBytesRead = 4 then
+  begin
+    // Check for PNG signature
+    if (LBuffer[0] = $89) and (LBuffer[1] = $50) and (LBuffer[2] = $4E) and (LBuffer[3] = $47) then
+      Result := True
+    // Check for JPEG signature
+    else if (LBuffer[0] = $FF) and (LBuffer[1] = $D8) then
+      Result := True
+    // Check for GIF signature
+    else if (LBuffer[0] = $47) and (LBuffer[1] = $49) and (LBuffer[2] = $46) then
+      Result := True;
+  end;
+  
+  if not Result then
+    AError := 'File is not a valid image format (PNG, JPEG, or GIF)';
+end;
+
+end.
+```
+
+Usage:
+
+```delphi
+THorse.Post('/upload/avatar',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LFile: TStream;
+    LError: string;
+  begin
+    if not Req.ContentFields.TryGetValue('avatar', LFile) then
+    begin
+      Res.Status(THTTPStatus.BadRequest).Send('No file provided');
+      Exit;
+    end;
+    
+    // Validate file size (max 5MB)
+    if not TFileValidator.ValidateFileSize(LFile, 5 * 1024 * 1024, LError) then
+    begin
+      Res.Status(THTTPStatus.BadRequest).Send(LError);
+      Exit;
+    end;
+    
+    // Validate image format
+    if not TFileValidator.ValidateImageFile(LFile, LError) then
+    begin
+      Res.Status(THTTPStatus.BadRequest).Send(LError);
+      Exit;
+    end;
+    
+    // File is valid, save it
+    SaveAvatarFile(LFile);
+    Res.Send('Avatar uploaded successfully');
+  end);
+```
+
+</Accordion>
+
+### Streaming Large Files
+
+```delphi
+THorse.Get('/download/large-file',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LFileStream: TFileStream;
+  begin
+    LFileStream := TFileStream.Create('C:\large-file.zip', fmOpenRead or fmShareDenyWrite);
+    try
+      Res.Download(LFileStream, 'large-file.zip', 'application/zip');
+    except
+      LFileStream.Free;
+      raise;
+    end;
+  end);
+```
+
+### Custom Content Type
+
+```delphi
+THorse.Get('/data/export',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  begin
+    Res.ContentType('application/vnd.ms-excel')
+       .SendFile('C:\exports\data.xls');
+  end);
+```
+
+## File Storage Best Practices
+
+<Steps>
+
+<Step title="Validate all uploads">
+  Always validate file size, type, and content before saving. Never trust client-provided filenames or MIME types.
+</Step>
+
+<Step title="Generate secure filenames">
+  Use UUIDs or timestamps for filenames to prevent path traversal attacks and filename collisions.
+  
+  ```delphi
+  uses System.Hash;
+  
+  function GenerateSafeFileName(const AOriginalName: string): string;
+  var
+    LGuid: TGUID;
+    LExt: string;
+  begin
+    CreateGUID(LGuid);
+    LExt := ExtractFileExt(AOriginalName);
+    Result := GUIDToString(LGuid).Replace('{', '').Replace('}', '') + LExt;
+  end;
+  ```
+</Step>
+
+<Step title="Store outside web root">
+  Store uploaded files outside the web-accessible directory to prevent direct access.
+</Step>
+
+<Step title="Implement file size limits">
+  Set reasonable file size limits to prevent DoS attacks and disk space exhaustion.
+</Step>
+
+</Steps>
+
+## Error Handling
+
+```delphi
+THorse.Get('/files/:filename',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LFileName: string;
+  begin
+    LFileName := Req.Params['filename'];
+    
+    try
+      if not FileExists(LFileName) then
+      begin
+        Res.Status(THTTPStatus.NotFound).Send('File not found');
+        Exit;
+      end;
+      
+      Res.SendFile(LFileName);
+    except
+      on E: Exception do
+        Res.Status(THTTPStatus.InternalServerError)
+           .Send('Error loading file: ' + E.Message);
+    end;
+  end);
+```
+
+## MIME Type Detection
+
+Horse automatically detects MIME types based on file extensions using the `THorseMimeTypes` class.
+
+```delphi
+uses Horse.Mime;
+
+var
+  LMimeType: string;
+begin
+  LMimeType := THorseMimeTypes.GetFileType('document.pdf');
+  // Returns: 'application/pdf'
+  
+  LMimeType := THorseMimeTypes.GetFileType('image.jpg');
+  // Returns: 'image/jpeg'
+end;
+```
+
+<Tip>
+If automatic MIME type detection doesn't work for your use case, you can always specify the content type explicitly as the second parameter to `SendFile()`, `Download()`, or by using `ContentType()` before sending.
+</Tip>
+
+## API Reference
+
+### THorseResponse File Methods
+
+| Method | Description |
+|--------|-------------|
+| `SendFile(filename, [contentType])` | Send file for inline display |
+| `SendFile(stream, filename, [contentType])` | Send stream for inline display |
+| `Download(filename, [contentType])` | Force download of file |
+| `Download(stream, filename, [contentType])` | Force download of stream |
+| `Render(filename)` | Send HTML file |
+| `Render(stream, filename)` | Send HTML from stream |
+| `ContentType(type)` | Set response content type |
+
+### THorseRequest File Properties
+
+| Property | Description |
+|----------|-------------|
+| `ContentFields` | Access form fields and uploaded files |
+| `RawWebRequest.Files` | Direct access to uploaded files |
+| `ContentType` | Get request content type |
+
+---
+
+## Related Topics
+
+- [Error Handling](/advanced/error-handling) - Handle file operation errors
+- [Middleware](/core/middleware) - Create file upload middleware
+- [Static Files](/api/middlewares/third-party#static-files) - Serve static files easily

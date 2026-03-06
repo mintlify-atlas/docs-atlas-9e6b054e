@@ -1,0 +1,467 @@
+---
+title: 'THorseRequest'
+description: 'HTTP request object providing access to request data'
+---
+
+## Overview
+
+`THorseRequest` represents an HTTP request and provides access to headers, query parameters, route parameters, body content, cookies, and more.
+
+```delphi
+type
+  THorseRequest = class
+  private
+    FWebRequest: TWebRequest; // TRequest in FPC
+    // ...
+  public
+    // Methods and properties
+  end;
+```
+
+## Body Methods
+
+### Body (Get String)
+
+Get the raw request body as a string.
+
+```delphi
+function Body: string; overload; virtual;
+```
+
+<ResponseField name="Result" type="string">
+  Returns the raw request body content
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Post('/data',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    RawBody: string;
+  begin
+    RawBody := Req.Body;
+    Writeln('Received: ' + RawBody);
+    Res.Send('OK');
+  end);
+```
+
+### Body (Get Typed Object)
+
+Get the request body as a typed object.
+
+```delphi
+function Body<T: class>: T; overload;
+```
+
+<ParamField path="T" type="class" required>
+  The class type to cast the body to
+</ParamField>
+
+<ResponseField name="Result" type="T">
+  Returns the body as an instance of type T
+</ResponseField>
+
+**Example:**
+
+```delphi
+type
+  TUser = class
+    Name: string;
+    Email: string;
+  end;
+
+THorse.Post('/users',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    User: TUser;
+  begin
+    User := Req.Body<TUser>;
+    try
+      Writeln('User: ' + User.Name);
+      Res.Send('User created');
+    finally
+      User.Free;
+    end;
+  end);
+```
+
+### Body (Set Object)
+
+Set the request body object (typically used by middleware).
+
+```delphi
+function Body(const ABody: TObject): THorseRequest; overload; virtual;
+```
+
+<ParamField path="ABody" type="TObject" required>
+  The object to set as the request body
+</ParamField>
+
+<ResponseField name="Result" type="THorseRequest">
+  Returns the request instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+// Middleware that parses JSON body
+THorse.Use(
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    User: TUser;
+  begin
+    User := TJson.JsonToObject<TUser>(Req.Body);
+    Req.Body(User); // Set parsed object
+    Next;
+  end);
+```
+
+## Parameter Access Methods
+
+### Headers
+
+Get access to HTTP headers.
+
+```delphi
+function Headers: THorseCoreParam; virtual;
+```
+
+<ResponseField name="Result" type="THorseCoreParam">
+  Returns a parameter collection containing all request headers
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Get('/info',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    ContentType: string;
+  begin
+    ContentType := Req.Headers['Content-Type'];
+    Res.Send('Content-Type: ' + ContentType);
+  end);
+```
+
+### Query
+
+Get access to query string parameters.
+
+```delphi
+function Query: THorseCoreParam; virtual;
+```
+
+<ResponseField name="Result" type="THorseCoreParam">
+  Returns a parameter collection containing query string parameters
+</ResponseField>
+
+**Example:**
+
+```delphi
+// GET /search?q=horse&limit=10
+THorse.Get('/search',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    SearchQuery: string;
+    Limit: string;
+  begin
+    SearchQuery := Req.Query['q'];        // 'horse'
+    Limit := Req.Query['limit'];          // '10'
+    Res.Send('Searching for: ' + SearchQuery);
+  end);
+```
+
+### Params
+
+Get access to route parameters.
+
+```delphi
+function Params: THorseCoreParam; virtual;
+```
+
+<ResponseField name="Result" type="THorseCoreParam">
+  Returns a parameter collection containing route parameters
+</ResponseField>
+
+**Example:**
+
+```delphi
+// GET /users/123/posts/456
+THorse.Get('/users/:userId/posts/:postId',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    UserId: string;
+    PostId: string;
+  begin
+    UserId := Req.Params['userId'];  // '123'
+    PostId := Req.Params['postId'];  // '456'
+    Res.Send('User: ' + UserId + ', Post: ' + PostId);
+  end);
+```
+
+### Cookie
+
+Get access to cookies.
+
+```delphi
+function Cookie: THorseCoreParam; virtual;
+```
+
+<ResponseField name="Result" type="THorseCoreParam">
+  Returns a parameter collection containing cookies
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Get('/profile',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    SessionId: string;
+  begin
+    SessionId := Req.Cookie['sessionId'];
+    Res.Send('Session: ' + SessionId);
+  end);
+```
+
+### ContentFields
+
+Get access to form data fields (multipart/form-data or application/x-www-form-urlencoded).
+
+```delphi
+function ContentFields: THorseCoreParam; virtual;
+```
+
+<ResponseField name="Result" type="THorseCoreParam">
+  Returns a parameter collection containing form fields and uploaded files
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Post('/upload',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    Username: string;
+    FileStream: TStream;
+  begin
+    Username := Req.ContentFields['username'];
+    FileStream := Req.ContentFields.Field('file').AsStream;
+    // Process file upload
+    Res.Send('File uploaded by: ' + Username);
+  end);
+```
+
+## Session Methods
+
+### Session (Get Typed Session)
+
+Get the session object as a typed instance.
+
+```delphi
+function Session<T: class>: T; overload;
+```
+
+<ParamField path="T" type="class" required>
+  The class type to cast the session to
+</ParamField>
+
+<ResponseField name="Result" type="T">
+  Returns the session as an instance of type T
+</ResponseField>
+
+**Example:**
+
+```delphi
+type
+  TUserSession = class
+    UserId: Integer;
+    Username: string;
+  end;
+
+THorse.Get('/dashboard',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    UserSession: TUserSession;
+  begin
+    UserSession := Req.Session<TUserSession>;
+    Res.Send('Welcome, ' + UserSession.Username);
+  end);
+```
+
+### Session (Set Session Object)
+
+Set the session object.
+
+```delphi
+function Session(const ASession: TObject): THorseRequest; overload; virtual;
+```
+
+<ParamField path="ASession" type="TObject" required>
+  The object to set as the session
+</ParamField>
+
+<ResponseField name="Result" type="THorseRequest">
+  Returns the request instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Post('/login',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    UserSession: TUserSession;
+  begin
+    UserSession := TUserSession.Create;
+    UserSession.UserId := 123;
+    UserSession.Username := 'john';
+    Req.Session(UserSession);
+    Res.Send('Logged in');
+  end);
+```
+
+### Sessions
+
+Get access to the sessions manager.
+
+```delphi
+function Sessions: THorseSessions; virtual;
+```
+
+<ResponseField name="Result" type="THorseSessions">
+  Returns the sessions manager instance
+</ResponseField>
+
+## Request Information Methods
+
+### MethodType
+
+Get the HTTP method type of the request.
+
+```delphi
+function MethodType: TMethodType; virtual;
+```
+
+<ResponseField name="Result" type="TMethodType">
+  Returns the HTTP method (mtGet, mtPost, mtPut, mtDelete, mtPatch, mtHead)
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.All('/*',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    case Req.MethodType of
+      mtGet: Writeln('GET request');
+      mtPost: Writeln('POST request');
+      mtPut: Writeln('PUT request');
+      mtDelete: Writeln('DELETE request');
+    end;
+    Next;
+  end);
+```
+
+### ContentType
+
+Get the Content-Type header value.
+
+```delphi
+function ContentType: string; virtual;
+```
+
+<ResponseField name="Result" type="string">
+  Returns the Content-Type header value
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Post('/data',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    if Req.ContentType = 'application/json' then
+      // Process JSON
+    else
+      Res.Status(415).Send('Unsupported Media Type');
+  end);
+```
+
+### Host
+
+Get the host name from the request.
+
+```delphi
+function Host: string; virtual;
+```
+
+<ResponseField name="Result" type="string">
+  Returns the host name
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Get('/info',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.Send('Host: ' + Req.Host);
+  end);
+```
+
+### PathInfo
+
+Get the request path.
+
+```delphi
+function PathInfo: string; virtual;
+```
+
+<ResponseField name="Result" type="string">
+  Returns the request path
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Use(
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Writeln('Request path: ' + Req.PathInfo);
+    Next;
+  end);
+```
+
+### RawWebRequest
+
+Get the underlying web request object.
+
+```delphi
+function RawWebRequest: TWebRequest; virtual; // TRequest in FPC
+```
+
+<ResponseField name="Result" type="TWebRequest">
+  Returns the underlying TWebRequest (Delphi) or TRequest (FPC) object
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Get('/raw',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    RawReq: TWebRequest;
+  begin
+    RawReq := Req.RawWebRequest;
+    // Access low-level request properties
+    Res.Send('OK');
+  end);
+```
+
+## See Also
+
+- [THorseResponse](/api/thorse-response) - Response object API
+- [THorse](/api/thorse) - Main framework class
+- [Callback Types](/api/callbacks) - Callback type definitions

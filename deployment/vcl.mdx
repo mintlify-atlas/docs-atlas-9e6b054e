@@ -1,0 +1,530 @@
+---
+title: VCL Application Deployment
+description: Deploy Horse with a VCL graphical interface for Windows desktop applications
+---
+
+## Overview
+
+VCL (Visual Component Library) deployment allows you to create Horse applications with a Windows graphical user interface. This is ideal for applications that need visual control over the server, such as start/stop buttons, configuration panels, and real-time monitoring.
+
+<Note>
+VCL deployment is Windows-only and requires the `HORSE_VCL` conditional define to be set in your project options.
+</Note>
+
+## When to Use VCL Deployment
+
+- **Desktop Server Applications**: Applications with GUI controls for server management
+- **Internal Tools**: Corporate applications that need visual monitoring
+- **Development/Testing**: Easy visual debugging and control during development
+- **Configuration Management**: Applications requiring interactive configuration
+- **Windows-Specific Deployments**: When targeting Windows desktop environments
+
+## Required Conditional Define
+
+<Warning>
+You **must** add `HORSE_VCL` to your project's conditional defines for VCL deployment to work.
+</Warning>
+
+<Steps>
+  <Step title="Open Project Options">
+    In Delphi, go to **Project → Options → Delphi Compiler → Compiling**
+  </Step>
+  
+  <Step title="Add Conditional Define">
+    In the "Conditional defines" field, add: `HORSE_VCL`
+  </Step>
+  
+  <Step title="Save and Rebuild">
+    Click OK and rebuild your project completely
+  </Step>
+</Steps>
+
+## Basic VCL Application
+
+### Project File
+
+```delphi
+program VCL;
+
+uses
+  Vcl.Forms,
+  Main.Form in 'src\Main.Form.pas' {FrmVCL};
+
+{$R *.res}
+
+begin
+  ReportMemoryLeaksOnShutdown := True;
+  Application.Initialize;
+  Application.MainFormOnTaskbar := True;
+  Application.CreateForm(TFrmVCL, FrmVCL);
+  Application.Run;
+end.
+```
+
+### Main Form Unit
+
+```delphi
+unit Main.Form;
+
+interface
+
+uses
+  Winapi.Windows, System.Variants, System.Classes, Vcl.Graphics,
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.Buttons,
+  System.SysUtils;
+
+type
+  TFrmVCL = class(TForm)
+    btnStop: TBitBtn;
+    btnStart: TBitBtn;
+    Label1: TLabel;
+    edtPort: TEdit;
+    procedure btnStopClick(Sender: TObject);
+    procedure FormClose(Sender: TObject; var Action: TCloseAction);
+    procedure btnStartClick(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
+  private
+    procedure Status;
+    procedure Start;
+    procedure Stop;
+  end;
+
+var
+  FrmVCL: TFrmVCL;
+
+implementation
+
+uses Horse;
+
+{$R *.dfm}
+
+procedure TFrmVCL.FormClose(Sender: TObject; var Action: TCloseAction);
+begin
+  if THorse.IsRunning then
+    Stop;
+end;
+
+procedure TFrmVCL.FormCreate(Sender: TObject);
+begin
+  THorse.Get('ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong');
+    end);
+end;
+
+procedure TFrmVCL.Start;
+begin
+  // Need to set "HORSE_VCL" compilation directive
+  THorse.Listen(StrToInt(edtPort.Text));
+end;
+
+procedure TFrmVCL.Status;
+begin
+  btnStop.Enabled := THorse.IsRunning;
+  btnStart.Enabled := not THorse.IsRunning;
+  edtPort.Enabled := not THorse.IsRunning;
+end;
+
+procedure TFrmVCL.Stop;
+begin
+  THorse.StopListen;
+end;
+
+procedure TFrmVCL.btnStartClick(Sender: TObject);
+begin
+  Start;
+  Status;
+end;
+
+procedure TFrmVCL.btnStopClick(Sender: TObject);
+begin
+  Stop;
+  Status;
+end;
+
+end.
+```
+
+## Advanced VCL Example with Monitoring
+
+```delphi
+unit Main.Form;
+
+interface
+
+uses
+  Winapi.Windows, System.SysUtils, System.Classes, Vcl.Graphics,
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.ComCtrls,
+  Vcl.ExtCtrls;
+
+type
+  TFrmMain = class(TForm)
+    btnStart: TButton;
+    btnStop: TButton;
+    edtPort: TEdit;
+    lblPort: TLabel;
+    memoLog: TMemo;
+    StatusBar: TStatusBar;
+    Timer: TTimer;
+    edtHost: TEdit;
+    lblHost: TLabel;
+    spinMaxConnections: TSpinEdit;
+    lblMaxConnections: TLabel;
+    procedure btnStartClick(Sender: TObject);
+    procedure btnStopClick(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
+    procedure FormClose(Sender: TObject; var Action: TCloseAction);
+    procedure TimerTimer(Sender: TObject);
+  private
+    procedure ConfigureRoutes;
+    procedure StartServer;
+    procedure StopServer;
+    procedure UpdateStatus;
+    procedure Log(const AMessage: string);
+  end;
+
+var
+  FrmMain: TFrmMain;
+
+implementation
+
+uses
+  Horse,
+  System.DateUtils;
+
+{$R *.dfm}
+
+procedure TFrmMain.FormCreate(Sender: TObject);
+begin
+  edtPort.Text := '9000';
+  edtHost.Text := '0.0.0.0';
+  spinMaxConnections.Value := 100;
+  
+  ConfigureRoutes;
+  UpdateStatus;
+end;
+
+procedure TFrmMain.ConfigureRoutes;
+begin
+  // Health check endpoint
+  THorse.Get('/ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong');
+    end);
+
+  // API endpoint with logging
+  THorse.Get('/api/data',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Log('GET /api/data - ' + Req.Headers['User-Agent']);
+      Res.Send('{"status": "ok", "timestamp": "' + 
+        DateToISO8601(Now) + '"}');
+    end);
+
+  // Error handling
+  THorse.Post('/api/users',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      try
+        // Process request
+        Log('POST /api/users');
+        Res.Send('{"id": 1, "name": "John Doe"}');
+      except
+        on E: Exception do
+        begin
+          Log('ERROR: ' + E.Message);
+          Res.Status(500).Send('{"error": "' + E.Message + '"}');
+        end;
+      end;
+    end);
+end;
+
+procedure TFrmMain.StartServer;
+begin
+  try
+    // Configure server
+    THorse.Port := StrToInt(edtPort.Text);
+    THorse.Host := edtHost.Text;
+    THorse.MaxConnections := spinMaxConnections.Value;
+    
+    // Start listening
+    THorse.Listen(
+      procedure
+      begin
+        Log(Format('Server started on %s:%d', [THorse.Host, THorse.Port]));
+        Log(Format('Max Connections: %d', [THorse.MaxConnections]));
+      end);
+    
+    UpdateStatus;
+  except
+    on E: Exception do
+    begin
+      ShowMessage('Failed to start server: ' + E.Message);
+      Log('ERROR: ' + E.Message);
+    end;
+  end;
+end;
+
+procedure TFrmMain.StopServer;
+begin
+  try
+    THorse.StopListen;
+    Log('Server stopped');
+    UpdateStatus;
+  except
+    on E: Exception do
+    begin
+      ShowMessage('Failed to stop server: ' + E.Message);
+      Log('ERROR: ' + E.Message);
+    end;
+  end;
+end;
+
+procedure TFrmMain.UpdateStatus;
+var
+  IsRunning: Boolean;
+begin
+  IsRunning := THorse.IsRunning;
+  
+  btnStart.Enabled := not IsRunning;
+  btnStop.Enabled := IsRunning;
+  edtPort.Enabled := not IsRunning;
+  edtHost.Enabled := not IsRunning;
+  spinMaxConnections.Enabled := not IsRunning;
+  
+  if IsRunning then
+  begin
+    StatusBar.Panels[0].Text := Format('Running on %s:%d', 
+      [THorse.Host, THorse.Port]);
+    Timer.Enabled := True;
+  end
+  else
+  begin
+    StatusBar.Panels[0].Text := 'Stopped';
+    Timer.Enabled := False;
+  end;
+end;
+
+procedure TFrmMain.Log(const AMessage: string);
+begin
+  memoLog.Lines.Add(Format('[%s] %s', 
+    [FormatDateTime('yyyy-mm-dd hh:nn:ss', Now), AMessage]));
+end;
+
+procedure TFrmMain.TimerTimer(Sender: TObject);
+begin
+  // Update runtime statistics
+  StatusBar.Panels[1].Text := Format('Uptime: %s', 
+    [FormatDateTime('hh:nn:ss', Now)]);
+end;
+
+procedure TFrmMain.btnStartClick(Sender: TObject);
+begin
+  StartServer;
+end;
+
+procedure TFrmMain.btnStopClick(Sender: TObject);
+begin
+  StopServer;
+end;
+
+procedure TFrmMain.FormClose(Sender: TObject; var Action: TCloseAction);
+begin
+  if THorse.IsRunning then
+    StopServer;
+end;
+
+end.
+```
+
+## VCL with SSL Support
+
+For a complete SSL example, see the [SSL/TLS Configuration](/deployment/ssl) page. Here's a basic VCL SSL setup:
+
+```delphi
+uses
+  Horse,
+  IdSSLOpenSSL;
+
+procedure TFrmMain.StartServerWithSSL;
+begin
+  THorse.IOHandleSSL
+    .KeyFile('path\to\cert.key')
+    .CertFile('path\to\cert.crt')
+    .SSLVersions([sslvTLSv1_2])
+    .Active(True);
+
+  THorse.Listen(443,
+    procedure
+    begin
+      Log('HTTPS Server started on port 443');
+    end);
+end;
+```
+
+## Configuration Best Practices
+
+### Thread Safety
+
+<Warning>
+When updating UI components from Horse callbacks, use `TThread.Synchronize` to ensure thread safety:
+</Warning>
+
+```delphi
+THorse.Get('/api/status',
+  procedure(Req: THorseRequest; Res: THorseResponse)
+  begin
+    TThread.Synchronize(nil,
+      procedure
+      begin
+        memoLog.Lines.Add('Status requested');
+      end);
+    
+    Res.Send('{"status": "ok"}');
+  end);
+```
+
+### Resource Management
+
+```delphi
+procedure TFrmMain.FormClose(Sender: TObject; var Action: TCloseAction);
+begin
+  // Always stop the server before closing
+  if THorse.IsRunning then
+  begin
+    THorse.StopListen;
+    Sleep(100); // Give it time to cleanup
+  end;
+end;
+```
+
+### Error Handling
+
+```delphi
+procedure TFrmMain.StartServer;
+begin
+  try
+    THorse.Listen(StrToInt(edtPort.Text));
+  except
+    on E: EConvertError do
+      ShowMessage('Invalid port number');
+    on E: Exception do
+      ShowMessage('Server error: ' + E.Message);
+  end;
+end;
+```
+
+## Project Configuration
+
+### DPR File Settings
+
+```delphi
+program MyVCLServer;
+
+uses
+  Vcl.Forms,
+  MainForm in 'MainForm.pas' {FrmMain};
+
+{$R *.res}
+
+begin
+  ReportMemoryLeaksOnShutdown := True;
+  Application.Initialize;
+  Application.MainFormOnTaskbar := True;
+  Application.CreateForm(TFrmMain, FrmMain);
+  Application.Run;
+end.
+```
+
+### Conditional Defines
+
+```text
+Project Options → Delphi Compiler → Compiling → Conditional defines:
+HORSE_VCL
+```
+
+## Features and Limitations
+
+### Available Features
+
+✅ Full VCL GUI integration  
+✅ Start/Stop server control  
+✅ Real-time monitoring  
+✅ SSL/TLS support  
+✅ Configuration management  
+✅ Thread-safe callbacks  
+✅ IsRunning status check  
+
+### Limitations
+
+❌ Windows only  
+❌ Requires user interaction to start  
+❌ Not suitable for services  
+❌ Cannot run headless  
+
+## Deployment
+
+### Building for Distribution
+
+1. Set build configuration to **Release**
+2. Enable optimization in project options
+3. Include required DLLs (for SSL: `ssleay32.dll`, `libeay32.dll`)
+4. Test on a clean Windows installation
+
+### Installer Considerations
+
+```text
+Required files:
+- YourApp.exe
+- Required Delphi runtime packages (if not static linked)
+- SSL DLLs (if using HTTPS)
+- Configuration files
+- Certificate files (if using SSL)
+```
+
+## Troubleshooting
+
+### Server Won't Start
+
+<Warning>
+Common issues:
+- Missing `HORSE_VCL` define
+- Port already in use
+- Invalid port number
+- Firewall blocking the port
+</Warning>
+
+```delphi
+// Check if server is already running
+if THorse.IsRunning then
+  ShowMessage('Server is already running');
+```
+
+### UI Freezing
+
+Always use callbacks for long-running operations:
+
+```delphi
+// Wrong - blocks UI
+THorse.Listen(9000);
+
+// Correct - non-blocking
+THorse.Listen(9000,
+  procedure
+  begin
+    ShowMessage('Server started');
+  end);
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="SSL Configuration" icon="lock" href="/deployment/ssl">
+    Add HTTPS support to your VCL application
+  </Card>
+  <Card title="Console Deployment" icon="terminal" href="/deployment/console">
+    Learn about headless console deployment
+  </Card>
+</CardGroup>

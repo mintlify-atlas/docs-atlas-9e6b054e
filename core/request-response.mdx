@@ -1,0 +1,648 @@
+---
+title: Request and Response
+description: Working with THorseRequest and THorseResponse objects to handle HTTP requests and responses
+---
+
+Every route handler and middleware in Horse receives two main objects: `THorseRequest` for accessing request data and `THorseResponse` for sending responses.
+
+## THorseRequest
+
+The `THorseRequest` class provides access to all incoming request data. It's defined in `Horse.Request.pas`.
+
+### Request Body
+
+Access the raw request body as a string:
+
+```delphi
+function Body: string;
+```
+
+**Example:**
+```delphi
+THorse.Post('/users',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    LBody: string;
+    LJson: TJSONObject;
+  begin
+    LBody := Req.Body;
+    LJson := TJSONObject.ParseJSONValue(LBody) as TJSONObject;
+    try
+      // Process JSON
+      Res.Send('{"status": "created"}');
+    finally
+      LJson.Free;
+    end;
+  end);
+```
+
+### Typed Body
+
+Store and retrieve typed objects in the request:
+
+```delphi
+function Body<T: class>: T;
+function Body(const ABody: TObject): THorseRequest;
+```
+
+**Example:**
+```delphi
+type
+  TUser = class
+    Name: string;
+    Email: string;
+  end;
+
+procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+var
+  LUser: TUser;
+begin
+  // Store object in request
+  LUser := TUser.Create;
+  LUser.Name := 'John';
+  Req.Body(LUser);
+  
+  // Later retrieve it
+  LUser := Req.Body<TUser>;
+  Writeln(LUser.Name);
+end;
+```
+
+### Headers
+
+Access HTTP headers via the `Headers` property:
+
+```delphi
+function Headers: THorseCoreParam;
+```
+
+**Example:**
+```delphi
+var
+  LToken: string;
+  LContentType: string;
+begin
+  LToken := Req.Headers['Authorization'];
+  LContentType := Req.Headers['Content-Type'];
+  
+  // Check if header exists
+  if Req.Headers.ContainsKey('X-Custom-Header') then
+    Writeln('Custom header present');
+  
+  // Iterate all headers
+  for var LPair in Req.Headers.ToArray do
+    Writeln(LPair.Key + ': ' + LPair.Value);
+end;
+```
+
+### Query Parameters
+
+Access query string parameters:
+
+```delphi
+function Query: THorseCoreParam;
+```
+
+**Example:**
+```delphi
+// Request: GET /search?q=horse&page=2&limit=10
+
+THorse.Get('/search',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    LSearchTerm: string;
+    LPage: string;
+    LLimit: string;
+  begin
+    LSearchTerm := Req.Query['q'];      // 'horse'
+    LPage := Req.Query['page'];         // '2'
+    LLimit := Req.Query['limit'];       // '10'
+    
+    // Check if parameter exists
+    if Req.Query.ContainsKey('filter') then
+      // Use filter
+    
+    Res.Send('Search results');
+  end);
+```
+
+### Route Parameters
+
+Access route parameters from the URL path:
+
+```delphi
+function Params: THorseCoreParam;
+```
+
+**Example:**
+```delphi
+// Route: /users/:userId/posts/:postId
+
+THorse.Get('/users/:userId/posts/:postId',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    LUserId: string;
+    LPostId: string;
+  begin
+    LUserId := Req.Params['userId'];
+    LPostId := Req.Params['postId'];
+    
+    Res.Send(Format('User %s, Post %s', [LUserId, LPostId]));
+  end);
+```
+
+### Cookies
+
+Access cookie data:
+
+```delphi
+function Cookie: THorseCoreParam;
+```
+
+**Example:**
+```delphi
+var
+  LSessionId: string;
+begin
+  LSessionId := Req.Cookie['session_id'];
+  
+  if Req.Cookie.ContainsKey('user_prefs') then
+    // Load user preferences
+end;
+```
+
+### Content Fields
+
+Access form data and multipart form fields:
+
+```delphi
+function ContentFields: THorseCoreParam;
+```
+
+**Example:**
+```delphi
+THorse.Post('/upload',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    LUsername: string;
+    LEmail: string;
+  begin
+    // Access form fields
+    LUsername := Req.ContentFields['username'];
+    LEmail := Req.ContentFields['email'];
+    
+    Res.Send('{"message": "Form received"}');
+  end);
+```
+
+### Request Properties
+
+Access various request properties:
+
+```delphi
+function MethodType: TMethodType;  // HTTP method (mtGet, mtPost, etc.)
+function ContentType: string;       // Content-Type header
+function Host: string;              // Host header
+function PathInfo: string;          // Request path
+```
+
+**Example:**
+```delphi
+procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+begin
+  Writeln('Method: ' + Req.MethodType.ToString);
+  Writeln('Content-Type: ' + Req.ContentType);
+  Writeln('Host: ' + Req.Host);
+  Writeln('Path: ' + Req.PathInfo);
+  
+  if Req.MethodType = TMethodType.mtPost then
+    // Handle POST
+  else if Req.MethodType = TMethodType.mtGet then
+    // Handle GET
+end;
+```
+
+### Session Management
+
+Store and retrieve session objects:
+
+```delphi
+function Session<T: class>: T;
+function Session(const ASession: TObject): THorseRequest;
+function Sessions: THorseSessions;
+```
+
+### Raw Web Request
+
+Access the underlying web request object:
+
+```delphi
+function RawWebRequest: {$IF DEFINED(FPC)}TRequest{$ELSE}TWebRequest{$ENDIF};
+```
+
+## THorseResponse
+
+The `THorseResponse` class is used to send HTTP responses. It's defined in `Horse.Response.pas`.
+
+### Sending Responses
+
+Send a string response:
+
+```delphi
+function Send(const AContent: string): THorseResponse;
+```
+
+**Example:**
+```delphi
+Res.Send('Hello World');
+Res.Send('{"message": "Success"}');
+
+// Method chaining
+Res.Status(THTTPStatus.Created).Send('{"id": 123}');
+```
+
+### Sending Typed Objects
+
+Send typed objects:
+
+```delphi
+function Send<T: class>(AContent: T): THorseResponse;
+```
+
+**Example:**
+```delphi
+var
+  LUser: TUser;
+begin
+  LUser := TUser.Create;
+  try
+    LUser.Name := 'John';
+    Res.Send<TUser>(LUser);
+  finally
+    // Object will be freed by Horse
+  end;
+end;
+```
+
+### Setting Status Code
+
+Set HTTP status code:
+
+```delphi
+function Status(const AStatus: Integer): THorseResponse; overload;
+function Status(const AStatus: THTTPStatus): THorseResponse; overload;
+function Status: Integer; overload;  // Get current status
+```
+
+**Example:**
+```delphi
+// Using THTTPStatus enum
+Res.Status(THTTPStatus.OK).Send('Success');
+Res.Status(THTTPStatus.Created).Send('{"id": 1}');
+Res.Status(THTTPStatus.BadRequest).Send('{"error": "Invalid input"}');
+Res.Status(THTTPStatus.NotFound).Send('{"error": "Not found"}');
+Res.Status(THTTPStatus.InternalServerError).Send('{"error": "Server error"}');
+
+// Using integer
+Res.Status(200).Send('OK');
+Res.Status(404).Send('Not Found');
+
+// Get current status
+var LStatus: Integer;
+LStatus := Res.Status;
+```
+
+### Common HTTP Status Codes
+
+<CodeGroup>
+```delphi Success Responses
+Res.Status(THTTPStatus.OK);                    // 200
+Res.Status(THTTPStatus.Created);               // 201
+Res.Status(THTTPStatus.Accepted);              // 202
+Res.Status(THTTPStatus.NoContent);             // 204
+```
+
+```delphi Client Errors
+Res.Status(THTTPStatus.BadRequest);            // 400
+Res.Status(THTTPStatus.Unauthorized);          // 401
+Res.Status(THTTPStatus.Forbidden);             // 403
+Res.Status(THTTPStatus.NotFound);              // 404
+Res.Status(THTTPStatus.MethodNotAllowed);      // 405
+Res.Status(THTTPStatus.Conflict);              // 409
+Res.Status(THTTPStatus.UnprocessableEntity);   // 422
+```
+
+```delphi Server Errors
+Res.Status(THTTPStatus.InternalServerError);   // 500
+Res.Status(THTTPStatus.NotImplemented);        // 501
+Res.Status(THTTPStatus.BadGateway);            // 502
+Res.Status(THTTPStatus.ServiceUnavailable);    // 503
+```
+</CodeGroup>
+
+### Response Headers
+
+Add or remove HTTP headers:
+
+```delphi
+function AddHeader(const AName, AValue: string): THorseResponse;
+function RemoveHeader(const AName: string): THorseResponse;
+```
+
+**Example:**
+```delphi
+Res.AddHeader('X-Custom-Header', 'CustomValue')
+   .AddHeader('X-Request-ID', '12345')
+   .Send('Response with headers');
+
+// CORS headers
+Res.AddHeader('Access-Control-Allow-Origin', '*')
+   .AddHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE')
+   .Send('{"data": "value"}');
+
+// Remove a header
+Res.RemoveHeader('X-Powered-By');
+```
+
+### Content Type
+
+Set the Content-Type header:
+
+```delphi
+function ContentType(const AContentType: string): THorseResponse;
+```
+
+**Example:**
+```delphi
+// JSON response
+Res.ContentType('application/json')
+   .Send('{"message": "Hello"}');
+
+// HTML response
+Res.ContentType('text/html')
+   .Send('<h1>Hello World</h1>');
+
+// Plain text
+Res.ContentType('text/plain')
+   .Send('Plain text response');
+
+// Using TMimeTypes helper
+Res.ContentType(TMimeTypes.ApplicationJSON.ToString)
+   .Send('{"data": "value"}');
+```
+
+### Sending Files
+
+Send files to the client:
+
+```delphi
+function SendFile(const AFileName: string; 
+                  const AContentType: string = ''): THorseResponse; overload;
+function SendFile(const AFileStream: TStream; 
+                  const AFileName: string = ''; 
+                  const AContentType: string = ''): THorseResponse; overload;
+```
+
+**Example:**
+```delphi
+// Send file from disk
+THorse.Get('/report.pdf',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.SendFile('C:\Reports\report.pdf', 'application/pdf');
+  end);
+
+// Send from stream
+THorse.Get('/image',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    LStream: TFileStream;
+  begin
+    LStream := TFileStream.Create('image.jpg', fmOpenRead);
+    Res.SendFile(LStream, 'image.jpg', 'image/jpeg');
+  end);
+
+// Content type is auto-detected if not specified
+Res.SendFile('document.pdf');  // Automatically sets application/pdf
+```
+
+### Download Files
+
+Force file download with Content-Disposition attachment:
+
+```delphi
+function Download(const AFileName: string; 
+                  const AContentType: string = ''): THorseResponse; overload;
+function Download(const AFileStream: TStream; 
+                  const AFileName: string; 
+                  const AContentType: string = ''): THorseResponse; overload;
+```
+
+**Example:**
+```delphi
+THorse.Get('/download/invoice',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.Download('C:\Invoices\invoice-123.pdf', 'application/pdf');
+    // Browser will download as invoice-123.pdf
+  end);
+```
+
+### Rendering HTML
+
+Render HTML files:
+
+```delphi
+function Render(const AFileName: string): THorseResponse; overload;
+function Render(const AFileStream: TStream; 
+                const AFileName: string): THorseResponse; overload;
+```
+
+**Example:**
+```delphi
+THorse.Get('/home',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.Render('C:\Website\index.html');
+  end);
+```
+
+### Redirects
+
+Redirect to another URL:
+
+```delphi
+function RedirectTo(const ALocation: string): THorseResponse; overload;
+function RedirectTo(const ALocation: string; 
+                    const AStatus: THTTPStatus): THorseResponse; overload;
+```
+
+**Example:**
+```delphi
+// Default redirect (303 See Other)
+Res.RedirectTo('/new-location');
+
+// Permanent redirect (301)
+Res.RedirectTo('/new-url', THTTPStatus.MovedPermanently);
+
+// Temporary redirect (307)
+Res.RedirectTo('/temporary', THTTPStatus.TemporaryRedirect);
+```
+
+### Response Content Object
+
+Store and retrieve typed objects in the response:
+
+```delphi
+function Content: TObject;
+function Content(const AContent: TObject): THorseResponse;
+```
+
+### Raw Web Response
+
+Access the underlying web response object:
+
+```delphi
+function RawWebResponse: {$IF DEFINED(FPC)}TResponse{$ELSE}TWebResponse{$ENDIF};
+```
+
+## Complete Example
+
+```delphi
+program RequestResponseExample;
+
+uses
+  Horse,
+  System.SysUtils,
+  System.JSON;
+
+begin
+  // Example 1: Query parameters
+  THorse.Get('/search',
+    procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+    var
+      LQuery, LPage, LLimit: string;
+    begin
+      LQuery := Req.Query['q'];
+      LPage := Req.Query['page'];
+      LLimit := Req.Query['limit'];
+      
+      Res.ContentType('application/json')
+         .Send(Format('{"query":"%s","page":%s,"limit":%s}', 
+                      [LQuery, LPage, LLimit]));
+    end);
+  
+  // Example 2: Route parameters and status codes
+  THorse.Get('/users/:id',
+    procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+    var
+      LUserId: string;
+      LUser: TJSONObject;
+    begin
+      LUserId := Req.Params['id'];
+      
+      if LUserId = '999' then
+      begin
+        Res.Status(THTTPStatus.NotFound)
+           .Send('{"error": "User not found"}');
+        Exit;
+      end;
+      
+      LUser := TJSONObject.Create;
+      try
+        LUser.AddPair('id', LUserId);
+        LUser.AddPair('name', 'User ' + LUserId);
+        LUser.AddPair('email', 'user' + LUserId + '@example.com');
+        
+        Res.Status(THTTPStatus.OK)
+           .ContentType('application/json')
+           .Send(LUser.ToString);
+      finally
+        LUser.Free;
+      end;
+    end);
+  
+  // Example 3: POST with body
+  THorse.Post('/users',
+    procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+    var
+      LRequest: TJSONObject;
+      LName, LEmail: string;
+    begin
+      LRequest := TJSONObject.ParseJSONValue(Req.Body) as TJSONObject;
+      try
+        LName := LRequest.GetValue('name').Value;
+        LEmail := LRequest.GetValue('email').Value;
+        
+        Res.Status(THTTPStatus.Created)
+           .AddHeader('Location', '/users/123')
+           .Send(Format('{"id":123,"name":"%s","email":"%s"}', 
+                       [LName, LEmail]));
+      finally
+        LRequest.Free;
+      end;
+    end);
+  
+  // Example 4: Headers and authentication
+  THorse.Get('/protected',
+    procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+    var
+      LToken: string;
+    begin
+      LToken := Req.Headers['Authorization'];
+      
+      if LToken <> 'Bearer secret-token' then
+      begin
+        Res.Status(THTTPStatus.Unauthorized)
+           .AddHeader('WWW-Authenticate', 'Bearer')
+           .Send('{"error": "Unauthorized"}');
+        Exit;
+      end;
+      
+      Res.Send('{"message": "Protected resource"}');
+    end);
+  
+  // Example 5: File download
+  THorse.Get('/download/:filename',
+    procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+    var
+      LFileName: string;
+    begin
+      LFileName := Req.Params['filename'];
+      Res.Download('C:\Files\' + LFileName);
+    end);
+  
+  THorse.Listen(9000);
+end.
+```
+
+## THorseCoreParam Methods
+
+The `THorseCoreParam` class (used by Headers, Query, Params, etc.) provides useful methods:
+
+```delphi
+function ContainsKey(const AKey: string): Boolean;
+function ContainsValue(const AValue: string): Boolean;
+function TryGetValue(const AKey: string; var AValue: string): Boolean;
+function ToArray: TArray<TPair<string, string>>;
+function Count: Integer;
+```
+
+**Example:**
+```delphi
+// Check if query parameter exists
+if Req.Query.ContainsKey('filter') then
+  LFilter := Req.Query['filter'];
+
+// Safe get with default
+var LPage: string;
+if not Req.Query.TryGetValue('page', LPage) then
+  LPage := '1';
+
+// Get count
+Writeln('Query parameters: ' + IntToStr(Req.Query.Count));
+
+// Iterate all
+for var LPair in Req.Query.ToArray do
+  Writeln(LPair.Key + ' = ' + LPair.Value);
+```

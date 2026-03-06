@@ -1,0 +1,589 @@
+---
+title: 'THorseResponse'
+description: 'HTTP response object for sending responses to clients'
+---
+
+## Overview
+
+`THorseResponse` represents an HTTP response and provides methods to send content, set status codes, manage headers, and handle file downloads.
+
+```delphi
+type
+  THorseResponse = class
+  private
+    FWebResponse: TWebResponse; // TResponse in FPC
+    FContent: TObject;
+  public
+    // Methods and properties
+  end;
+```
+
+## Response Methods
+
+### Send (String Content)
+
+Send a string response to the client.
+
+```delphi
+function Send(const AContent: string): THorseResponse; overload; virtual;
+```
+
+<ParamField path="AContent" type="string" required>
+  The string content to send
+</ParamField>
+
+<ResponseField name="Result" type="THorseResponse">
+  Returns the response instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Get('/hello',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.Send('Hello, World!');
+  end);
+```
+
+### Send (Typed Object)
+
+Send a typed object response (typically used with JSON middleware).
+
+```delphi
+function Send<T>(AContent: T): THorseResponse; overload;
+```
+
+<ParamField path="T" type="class" required>
+  The type of the content object
+</ParamField>
+
+<ParamField path="AContent" type="T" required>
+  The object to send
+</ParamField>
+
+<ResponseField name="Result" type="THorseResponse">
+  Returns the response instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+type
+  TUser = class
+    Id: Integer;
+    Name: string;
+  end;
+
+THorse.Get('/user',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    User: TUser;
+  begin
+    User := TUser.Create;
+    User.Id := 1;
+    User.Name := 'John Doe';
+    Res.Send<TUser>(User);
+  end);
+```
+
+## Status Methods
+
+### Status (Set with THTTPStatus)
+
+Set the HTTP status code using the THTTPStatus enum.
+
+```delphi
+function Status(const AStatus: THTTPStatus): THorseResponse; overload; virtual;
+```
+
+<ParamField path="AStatus" type="THTTPStatus" required>
+  The HTTP status code enum value
+</ParamField>
+
+<ResponseField name="Result" type="THorseResponse">
+  Returns the response instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Post('/users',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    // Create user
+    Res.Status(THTTPStatus.Created).Send('User created');
+  end);
+
+THorse.Get('/notfound',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.Status(THTTPStatus.NotFound).Send('Not Found');
+  end);
+```
+
+### Status (Set with Integer)
+
+Set the HTTP status code using an integer value.
+
+```delphi
+function Status(const AStatus: Integer): THorseResponse; overload; virtual;
+```
+
+<ParamField path="AStatus" type="Integer" required>
+  The HTTP status code (e.g., 200, 404, 500)
+</ParamField>
+
+<ResponseField name="Result" type="THorseResponse">
+  Returns the response instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Get('/custom',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.Status(418).Send('I am a teapot');
+  end);
+```
+
+### Status (Get)
+
+Get the current HTTP status code.
+
+```delphi
+function Status: Integer; overload; virtual;
+```
+
+<ResponseField name="Result" type="Integer">
+  Returns the current status code
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Get('/status',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    CurrentStatus: Integer;
+  begin
+    CurrentStatus := Res.Status;
+    Res.Send('Current status: ' + IntToStr(CurrentStatus));
+  end);
+```
+
+## File Response Methods
+
+### SendFile (Stream)
+
+Send a file from a stream to the client.
+
+```delphi
+function SendFile(const AFileStream: TStream; const AFileName: string = ''; const AContentType: string = ''): THorseResponse; overload; virtual;
+```
+
+<ParamField path="AFileStream" type="TStream" required>
+  The file stream to send
+</ParamField>
+
+<ParamField path="AFileName" type="string">
+  Optional file name for Content-Disposition header
+</ParamField>
+
+<ParamField path="AContentType" type="string">
+  Optional content type (auto-detected from file extension if not provided)
+</ParamField>
+
+<ResponseField name="Result" type="THorseResponse">
+  Returns the response instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Get('/image',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    FileStream: TFileStream;
+  begin
+    FileStream := TFileStream.Create('image.jpg', fmOpenRead);
+    Res.SendFile(FileStream, 'image.jpg', 'image/jpeg');
+  end);
+```
+
+### SendFile (File Path)
+
+Send a file from disk to the client.
+
+```delphi
+function SendFile(const AFileName: string; const AContentType: string = ''): THorseResponse; overload; virtual;
+```
+
+<ParamField path="AFileName" type="string" required>
+  The path to the file to send
+</ParamField>
+
+<ParamField path="AContentType" type="string">
+  Optional content type (auto-detected if not provided)
+</ParamField>
+
+<ResponseField name="Result" type="THorseResponse">
+  Returns the response instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Get('/document',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.SendFile('C:\Files\document.pdf');
+  end);
+```
+
+### Download (Stream)
+
+Trigger a file download from a stream.
+
+```delphi
+function Download(const AFileStream: TStream; const AFileName: string; const AContentType: string = ''): THorseResponse; overload; virtual;
+```
+
+<ParamField path="AFileStream" type="TStream" required>
+  The file stream to download
+</ParamField>
+
+<ParamField path="AFileName" type="string" required>
+  The file name to use in the download dialog
+</ParamField>
+
+<ParamField path="AContentType" type="string">
+  Optional content type
+</ParamField>
+
+<ResponseField name="Result" type="THorseResponse">
+  Returns the response instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Get('/export',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    DataStream: TMemoryStream;
+  begin
+    DataStream := TMemoryStream.Create;
+    // Generate export data
+    Res.Download(DataStream, 'export.csv', 'text/csv');
+  end);
+```
+
+### Download (File Path)
+
+Trigger a file download from disk.
+
+```delphi
+function Download(const AFileName: string; const AContentType: string = ''): THorseResponse; overload; virtual;
+```
+
+<ParamField path="AFileName" type="string" required>
+  The path to the file to download
+</ParamField>
+
+<ParamField path="AContentType" type="string">
+  Optional content type
+</ParamField>
+
+<ResponseField name="Result" type="THorseResponse">
+  Returns the response instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Get('/report',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.Download('C:\Reports\monthly-report.pdf');
+  end);
+```
+
+### Render (Stream)
+
+Render an HTML file from a stream.
+
+```delphi
+function Render(const AFileStream: TStream; const AFileName: string): THorseResponse; overload; virtual;
+```
+
+<ParamField path="AFileStream" type="TStream" required>
+  The HTML file stream
+</ParamField>
+
+<ParamField path="AFileName" type="string" required>
+  The file name
+</ParamField>
+
+<ResponseField name="Result" type="THorseResponse">
+  Returns the response instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Get('/page',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    HtmlStream: TFileStream;
+  begin
+    HtmlStream := TFileStream.Create('page.html', fmOpenRead);
+    Res.Render(HtmlStream, 'page.html');
+  end);
+```
+
+### Render (File Path)
+
+Render an HTML file from disk.
+
+```delphi
+function Render(const AFileName: string): THorseResponse; overload; virtual;
+```
+
+<ParamField path="AFileName" type="string" required>
+  The path to the HTML file
+</ParamField>
+
+<ResponseField name="Result" type="THorseResponse">
+  Returns the response instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Get('/',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.Render('C:\Web\index.html');
+  end);
+```
+
+## Header Methods
+
+### AddHeader
+
+Add or update a response header.
+
+```delphi
+function AddHeader(const AName, AValue: string): THorseResponse; virtual;
+```
+
+<ParamField path="AName" type="string" required>
+  The header name
+</ParamField>
+
+<ParamField path="AValue" type="string" required>
+  The header value
+</ParamField>
+
+<ResponseField name="Result" type="THorseResponse">
+  Returns the response instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Get('/data',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.AddHeader('X-Custom-Header', 'MyValue')
+       .AddHeader('Cache-Control', 'no-cache')
+       .Send('Data');
+  end);
+```
+
+### RemoveHeader
+
+Remove a response header.
+
+```delphi
+function RemoveHeader(const AName: string): THorseResponse; virtual;
+```
+
+<ParamField path="AName" type="string" required>
+  The header name to remove
+</ParamField>
+
+<ResponseField name="Result" type="THorseResponse">
+  Returns the response instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Get('/noheader',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.RemoveHeader('X-Powered-By')
+       .Send('Response without header');
+  end);
+```
+
+## Content Methods
+
+### Content (Get)
+
+Get the response content object.
+
+```delphi
+function Content: TObject; overload; virtual;
+```
+
+<ResponseField name="Result" type="TObject">
+  Returns the content object
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Get('/content',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    ContentObj: TObject;
+  begin
+    ContentObj := Res.Content;
+    // Work with content object
+  end);
+```
+
+### Content (Set)
+
+Set the response content object.
+
+```delphi
+function Content(const AContent: TObject): THorseResponse; overload; virtual;
+```
+
+<ParamField path="AContent" type="TObject" required>
+  The content object to set
+</ParamField>
+
+<ResponseField name="Result" type="THorseResponse">
+  Returns the response instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Get('/object',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    DataObject: TMyData;
+  begin
+    DataObject := TMyData.Create;
+    Res.Content(DataObject);
+  end);
+```
+
+### ContentType
+
+Set the Content-Type header.
+
+```delphi
+function ContentType(const AContentType: string): THorseResponse; virtual;
+```
+
+<ParamField path="AContentType" type="string" required>
+  The content type (e.g., 'application/json', 'text/html')
+</ParamField>
+
+<ResponseField name="Result" type="THorseResponse">
+  Returns the response instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Get('/xml',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.ContentType('application/xml')
+       .Send('<data>Hello</data>');
+  end);
+```
+
+## Redirect Method
+
+### RedirectTo
+
+Redirect the client to a different URL.
+
+```delphi
+function RedirectTo(const ALocation: string): THorseResponse; overload; virtual;
+function RedirectTo(const ALocation: string; const AStatus: THTTPStatus): THorseResponse; overload; virtual;
+```
+
+<ParamField path="ALocation" type="string" required>
+  The URL to redirect to
+</ParamField>
+
+<ParamField path="AStatus" type="THTTPStatus">
+  Optional HTTP status code (default: 303 See Other)
+</ParamField>
+
+<ResponseField name="Result" type="THorseResponse">
+  Returns the response instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+// Simple redirect (303 See Other)
+THorse.Get('/old-page',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.RedirectTo('/new-page');
+  end);
+
+// Permanent redirect (301 Moved Permanently)
+THorse.Get('/old-url',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.RedirectTo('/new-url', THTTPStatus.MovedPermanently);
+  end);
+```
+
+## Raw Response Access
+
+### RawWebResponse
+
+Get the underlying web response object.
+
+```delphi
+function RawWebResponse: TWebResponse; virtual; // TResponse in FPC
+```
+
+<ResponseField name="Result" type="TWebResponse">
+  Returns the underlying TWebResponse (Delphi) or TResponse (FPC) object
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse.Get('/raw',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    RawRes: TWebResponse;
+  begin
+    RawRes := Res.RawWebResponse;
+    // Access low-level response properties
+    Res.Send('OK');
+  end);
+```
+
+## See Also
+
+- [THorseRequest](/api/thorse-request) - Request object API
+- [THorse](/api/thorse) - Main framework class
+- [Callback Types](/api/callbacks) - Callback type definitions

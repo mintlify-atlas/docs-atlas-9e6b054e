@@ -1,0 +1,441 @@
+---
+title: Console Application Deployment
+description: Deploy Horse as a standalone console application on Windows, Linux, and macOS
+---
+
+## Overview
+
+Console deployment is the default and most straightforward way to run Horse applications. It creates a standalone executable that can run on Windows, Linux, and macOS, making it ideal for development, testing, and production environments.
+
+<Note>
+Console is the default provider for Horse. You don't need to set any conditional defines unless you're targeting a specific platform.
+</Note>
+
+## When to Use Console Deployment
+
+- **Development and Testing**: Quick iteration and debugging with direct console output
+- **Microservices**: Lightweight services that can be containerized (Docker, Kubernetes)
+- **Cross-Platform Applications**: Single codebase for Windows, Linux, and macOS
+- **Background Services**: Applications that don't require a GUI
+- **Simple APIs**: RESTful APIs without complex UI requirements
+
+## Basic Console Application
+
+<Steps>
+  <Step title="Create a New Console Project">
+    Create a new console application in Delphi or Lazarus.
+  </Step>
+  
+  <Step title="Add Horse to Your Uses Clause">
+    ```delphi
+    uses
+      Horse,
+      System.SysUtils;
+    ```
+  </Step>
+  
+  <Step title="Configure Routes and Start Server">
+    ```delphi
+    begin
+      THorse.Get('/ping',
+        procedure(Req: THorseRequest; Res: THorseResponse)
+        begin
+          Res.Send('pong');
+        end);
+
+      THorse.Listen(9000);
+    end.
+    ```
+  </Step>
+</Steps>
+
+## Complete Working Example
+
+<CodeGroup>
+```delphi Delphi
+program Console;
+
+{$APPTYPE CONSOLE}
+{$R *.res}
+
+uses
+  Horse,
+  System.SysUtils;
+
+begin
+  {$IFDEF MSWINDOWS}
+  IsConsole := False;
+  ReportMemoryLeaksOnShutdown := True;
+  {$ENDIF}
+
+  THorse.Get('/ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong');
+    end);
+
+  THorse.Listen(9000,
+    procedure
+    begin
+      Writeln(Format('Server is running on %s:%d', [THorse.Host, THorse.Port]));
+      Readln;
+    end);
+end.
+```
+
+```pascal Lazarus/FPC
+program Console;
+
+{$MODE DELPHI}{$H+}
+
+uses
+  {$IFDEF UNIX}{$IFDEF UseCThreads}
+  cthreads,
+  {$ENDIF}{$ENDIF}
+  Horse;
+
+procedure GetPing(Req: THorseRequest; Res: THorseResponse);
+begin
+  Res.Send('Ping');
+end;
+
+begin
+  THorse.Get('/ping', GetPing);
+  THorse.Listen(9000);
+end.
+```
+</CodeGroup>
+
+## Configuration Options
+
+The console provider supports various configuration options:
+
+### Host and Port Configuration
+
+```delphi
+// Default host (0.0.0.0) and custom port
+THorse.Listen(8080);
+
+// Custom host and port
+THorse.Listen(8080, '127.0.0.1');
+
+// With callbacks
+THorse.Listen(9000,
+  procedure
+  begin
+    Writeln('Server started successfully');
+  end,
+  procedure
+  begin
+    Writeln('Server stopped');
+  end);
+```
+
+### Connection Settings
+
+```delphi
+// Set maximum connections
+THorse.MaxConnections := 100;
+
+// Configure listen queue
+THorse.ListenQueue := 50;
+
+// Keep-alive connections (enabled by default)
+THorse.KeepConnectionAlive := True;
+```
+
+## Platform-Specific Considerations
+
+### Windows
+
+<CodeGroup>
+```delphi Project Settings
+{$APPTYPE CONSOLE}
+{$R *.res}
+
+{$IFDEF MSWINDOWS}
+  IsConsole := False;  // Prevents console window from closing on error
+  ReportMemoryLeaksOnShutdown := True;
+{$ENDIF}
+```
+
+```bash Running
+# Run directly
+Console.exe
+
+# Run on specific port
+Console.exe --port=8080
+```
+</CodeGroup>
+
+### Linux
+
+```bash
+# Make executable
+chmod +x console
+
+# Run directly
+./console
+
+# Run in background
+nohup ./console > output.log 2>&1 &
+
+# Run with specific port
+./console --port=8080
+```
+
+### macOS
+
+```bash
+# Make executable
+chmod +x console
+
+# Run directly
+./console
+
+# Run as background process
+./console &
+```
+
+## Docker Deployment
+
+Console applications work perfectly in Docker containers:
+
+<CodeGroup>
+```dockerfile Dockerfile
+FROM debian:stable-slim
+
+WORKDIR /app
+
+# Copy your compiled binary
+COPY console /app/
+
+# Make it executable
+RUN chmod +x /app/console
+
+# Expose port
+EXPOSE 9000
+
+# Run the application
+CMD ["/app/console"]
+```
+
+```yaml docker-compose.yml
+version: '3.8'
+services:
+  api:
+    build: .
+    ports:
+      - "9000:9000"
+    restart: unless-stopped
+    environment:
+      - PORT=9000
+```
+</CodeGroup>
+
+## Advanced Configuration
+
+### Multiple Ports and Hosts
+
+```delphi
+program MultiPort;
+
+uses
+  Horse,
+  System.SysUtils;
+
+begin
+  // Configure for specific interface
+  THorse.Host := '192.168.1.100';
+  THorse.Port := 8080;
+  
+  THorse.Get('/api/status',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('{"status": "running"}');
+    end);
+
+  THorse.Listen(
+    procedure
+    begin
+      Writeln(Format('API Server listening on %s:%d', [THorse.Host, THorse.Port]));
+      Writeln('Press ENTER to stop');
+      Readln;
+    end,
+    procedure
+    begin
+      Writeln('Server stopped gracefully');
+    end);
+end.
+```
+
+### Graceful Shutdown
+
+```delphi
+uses
+  Horse,
+  System.SysUtils,
+  {$IFDEF MSWINDOWS}
+  Winapi.Windows,
+  {$ENDIF}
+  {$IFDEF POSIX}
+  Posix.Signal,
+  {$ENDIF}
+  System.Classes;
+
+var
+  TerminateEvent: TEvent;
+
+{$IFDEF POSIX}
+procedure SignalHandler(SigNum: Integer); cdecl;
+begin
+  if SigNum = SIGTERM then
+  begin
+    Writeln('Received SIGTERM, shutting down...');
+    THorse.StopListen;
+    TerminateEvent.SetEvent;
+  end;
+end;
+{$ENDIF}
+
+begin
+  TerminateEvent := TEvent.Create;
+  try
+    {$IFDEF POSIX}
+    Signal(SIGTERM, TSignalHandler(@SignalHandler));
+    {$ENDIF}
+
+    THorse.Get('/ping',
+      procedure(Req: THorseRequest; Res: THorseResponse)
+      begin
+        Res.Send('pong');
+      end);
+
+    THorse.Listen(9000,
+      procedure
+      begin
+        Writeln('Server started on port 9000');
+      end);
+
+    TerminateEvent.WaitFor;
+  finally
+    TerminateEvent.Free;
+  end;
+end.
+```
+
+## Monitoring and Logging
+
+```delphi
+uses
+  Horse,
+  Horse.Logger,
+  Horse.Logger.Provider.Console,
+  System.SysUtils;
+
+begin
+  // Add console logger
+  THorseLoggerManager.RegisterProvider(
+    THorseLoggerProviderConsole.New
+  );
+  
+  THorse.Use(THorseLoggerManager.HorseCallback);
+
+  THorse.Get('/api/data',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('{"message": "Hello World"}');
+    end);
+
+  THorse.Listen(9000,
+    procedure
+    begin
+      Writeln('Server running with console logging');
+      Writeln('Press ENTER to stop');
+      Readln;
+    end);
+end.
+```
+
+## Troubleshooting
+
+### Port Already in Use
+
+<Warning>
+If you get a "port already in use" error, make sure no other application is using the port:
+</Warning>
+
+```bash
+# Windows
+netstat -ano | findstr :9000
+
+# Linux/macOS
+lsof -i :9000
+netstat -tuln | grep 9000
+```
+
+### Permission Denied on Linux
+
+```bash
+# Ports below 1024 require root privileges
+sudo ./console
+
+# Or use a higher port number (1024+)
+THorse.Listen(8080);
+```
+
+### Memory Leaks
+
+```delphi
+{$IFDEF MSWINDOWS}
+ReportMemoryLeaksOnShutdown := True;
+{$ENDIF}
+```
+
+## Performance Tuning
+
+```delphi
+program HighPerformance;
+
+uses
+  Horse,
+  System.SysUtils;
+
+begin
+  // Increase connection limits
+  THorse.MaxConnections := 1000;
+  
+  // Increase listen queue
+  THorse.ListenQueue := 200;
+  
+  // Enable keep-alive
+  THorse.KeepConnectionAlive := True;
+  
+  // Configure routes
+  THorse.Get('/ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong');
+    end);
+
+  THorse.Listen(9000,
+    procedure
+    begin
+      Writeln('High-performance server started');
+      Writeln(Format('Max Connections: %d', [THorse.MaxConnections]));
+      Writeln(Format('Listen Queue: %d', [THorse.ListenQueue]));
+      Readln;
+    end);
+end.
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="SSL/TLS Configuration" icon="lock" href="/deployment/ssl">
+    Secure your console application with HTTPS
+  </Card>
+  <Card title="Daemon Deployment" icon="server" href="/deployment/daemon">
+    Run as a Linux daemon or Windows service
+  </Card>
+</CardGroup>

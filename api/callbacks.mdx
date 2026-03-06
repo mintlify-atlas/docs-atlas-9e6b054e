@@ -1,0 +1,272 @@
+---
+title: 'Callback Types'
+description: 'Callback type definitions for request handlers and middleware'
+---
+
+## Overview
+
+Horse provides several callback types that can be used when defining routes and middleware. These types offer flexibility in how you handle requests and responses.
+
+## Callback Type Definitions
+
+### THorseCallback
+
+The full callback signature with request, response, and next function.
+
+```delphi
+THorseCallback = reference to procedure(AReq: THorseRequest; ARes: THorseResponse; ANext: TNextProc);
+```
+
+<ParamField path="AReq" type="THorseRequest" required>
+  The request object
+</ParamField>
+
+<ParamField path="ARes" type="THorseResponse" required>
+  The response object
+</ParamField>
+
+<ParamField path="ANext" type="TNextProc" required>
+  Procedure to call the next middleware or route handler
+</ParamField>
+
+This is the primary callback type used for middleware and route handlers. It provides full control over the request-response cycle and allows you to call the next handler in the chain.
+
+**Example:**
+
+```delphi
+THorse.Use(
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Writeln('Middleware executed');
+    Next; // Continue to next handler
+  end);
+
+THorse.Get('/users',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.Send('User list');
+  end);
+```
+
+### THorseCallbackRequestResponse
+
+A simplified callback with only request and response parameters.
+
+```delphi
+THorseCallbackRequestResponse = reference to procedure(AReq: THorseRequest; ARes: THorseResponse);
+```
+
+<ParamField path="AReq" type="THorseRequest" required>
+  The request object
+</ParamField>
+
+<ParamField path="ARes" type="THorseResponse" required>
+  The response object
+</ParamField>
+
+Use this callback type when you don't need to call the next handler. This is common for terminal route handlers that send a response.
+
+**Example:**
+
+```delphi
+THorse.Get('/ping',
+  procedure(Req: THorseRequest; Res: THorseResponse)
+  begin
+    Res.Send('pong');
+  end);
+
+THorse.Post('/users',
+  procedure(Req: THorseRequest; Res: THorseResponse)
+  var
+    User: TUser;
+  begin
+    User := Req.Body<TUser>;
+    // Save user to database
+    Res.Status(THTTPStatus.Created).Send('User created');
+  end);
+```
+
+### THorseCallbackRequest
+
+A callback with only the request parameter.
+
+```delphi
+THorseCallbackRequest = reference to procedure(AReq: THorseRequest);
+```
+
+<ParamField path="AReq" type="THorseRequest" required>
+  The request object
+</ParamField>
+
+Use this callback type when you only need to read from the request. The response will automatically be set to 204 No Content.
+
+**Example:**
+
+```delphi
+THorse.Post('/log',
+  procedure(Req: THorseRequest)
+  begin
+    Writeln('Received log: ' + Req.Body);
+    // Response automatically set to 204 No Content
+  end);
+
+THorse.Delete('/users/:id',
+  procedure(Req: THorseRequest)
+  var
+    UserId: string;
+  begin
+    UserId := Req.Params['id'];
+    // Delete user from database
+    // Response automatically set to 204 No Content
+  end);
+```
+
+### THorseCallbackResponse
+
+A callback with only the response parameter (Delphi only).
+
+```delphi
+THorseCallbackResponse = reference to procedure(ARes: THorseResponse);
+```
+
+<ParamField path="ARes" type="THorseResponse" required>
+  The response object
+</ParamField>
+
+<Note>
+  This callback type is only available in Delphi, not in Free Pascal/Lazarus.
+</Note>
+
+Use this callback type when you only need to send a response without reading request data.
+
+**Example:**
+
+```delphi
+THorse.Get('/status',
+  procedure(Res: THorseResponse)
+  begin
+    Res.Send('Server is running');
+  end);
+
+THorse.Get('/health',
+  procedure(Res: THorseResponse)
+  begin
+    Res.Status(THTTPStatus.Ok).Send('Healthy');
+  end);
+```
+
+## Support Types
+
+### TNextProc
+
+Procedure type for calling the next handler in the middleware chain.
+
+```delphi
+TNextProc = System.SysUtils.TProc; // procedure of object in FPC
+```
+
+Call `Next` in your middleware to pass control to the next handler. If you don't call `Next`, the request processing stops at your middleware.
+
+**Example:**
+
+```delphi
+// Authentication middleware
+THorse.Use(
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    Token: string;
+  begin
+    Token := Req.Headers['Authorization'];
+    if ValidateToken(Token) then
+      Next // Continue to next handler
+    else
+      Res.Status(401).Send('Unauthorized'); // Stop processing
+  end);
+```
+
+### TProc
+
+Generic procedure type.
+
+```delphi
+TProc = System.SysUtils.TProc; // procedure in FPC
+```
+
+Used for callbacks in `Listen` method and other utility functions.
+
+**Example:**
+
+```delphi
+THorse.Listen(9000,
+  procedure
+  begin
+    Writeln('Server started on port 9000');
+  end);
+```
+
+## Usage Guidelines
+
+### Choosing the Right Callback Type
+
+1. **Use `THorseCallback`** when:
+   - Writing middleware that needs to call `Next`
+   - You need full control over the request-response cycle
+   - You want to conditionally continue processing
+
+2. **Use `THorseCallbackRequestResponse`** when:
+   - Writing terminal route handlers
+   - You need both request and response access
+   - You're not writing middleware
+
+3. **Use `THorseCallbackRequest`** when:
+   - You only need to read request data
+   - Logging or tracking requests
+   - 204 No Content response is acceptable
+
+4. **Use `THorseCallbackResponse`** (Delphi only) when:
+   - You're sending static responses
+   - Request data is not needed
+
+### Middleware Chain Example
+
+```delphi
+// Logger middleware
+THorse.Use(
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Writeln(FormatDateTime('yyyy-mm-dd hh:nn:ss', Now) + ' - ' + Req.PathInfo);
+    Next;
+  end);
+
+// Authentication middleware
+THorse.Use('/api',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    if Req.Headers['Authorization'] <> '' then
+      Next
+    else
+      Res.Status(401).Send('Unauthorized');
+  end);
+
+// Route handler
+THorse.Get('/api/users',
+  procedure(Req: THorseRequest; Res: THorseResponse)
+  begin
+    Res.Send('User list');
+  end);
+```
+
+## Platform Compatibility
+
+| Callback Type | Delphi | Lazarus/FPC |
+|---------------|--------|-------------|
+| `THorseCallback` | ✔️ | ✔️ |
+| `THorseCallbackRequestResponse` | ✔️ | ✔️ |
+| `THorseCallbackRequest` | ✔️ | ✔️ |
+| `THorseCallbackResponse` | ✔️ | ❌ |
+
+## See Also
+
+- [THorse](/api/thorse) - Main framework class
+- [THorseRequest](/api/thorse-request) - Request object API
+- [THorseResponse](/api/thorse-response) - Response object API

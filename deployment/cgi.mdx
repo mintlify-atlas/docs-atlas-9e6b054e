@@ -1,0 +1,555 @@
+---
+title: CGI Deployment
+description: Deploy Horse as a Common Gateway Interface (CGI) application
+---
+
+## Overview
+
+CGI (Common Gateway Interface) deployment allows you to run Horse applications as standard CGI programs. This is the most portable web deployment method, supported by virtually all web servers including Apache, Nginx, IIS, and others.
+
+<Note>
+CGI deployment requires the `HORSE_CGI` conditional define. A new process is spawned for each request, making it less efficient than other deployment methods but more portable.
+</Note>
+
+## When to Use CGI Deployment
+
+- **Maximum Portability**: Works with any web server supporting CGI
+- **Shared Hosting**: Common on shared hosting environments
+- **Simple Deployment**: Minimal server configuration required
+- **Process Isolation**: Each request runs in isolated process
+- **Legacy Systems**: Integration with older web server setups
+- **Development/Testing**: Quick setup for testing
+
+<Warning>
+CGI spawns a new process for each request, making it slower than FastCGI, ISAPI, or Apache modules. Use for low-traffic applications or consider FastCGI for better performance.
+</Warning>
+
+## Required Conditional Define
+
+<Steps>
+  <Step title="Open Project Options">
+    Go to **Project → Options → Delphi Compiler → Compiling**
+  </Step>
+  
+  <Step title="Add Conditional Define">
+    Add: `HORSE_CGI`
+  </Step>
+  
+  <Step title="Set Application Type">
+    Ensure project is a console application: `{$APPTYPE CONSOLE}`
+  </Step>
+  
+  <Step title="Rebuild Project">
+    Clean and rebuild your project
+  </Step>
+</Steps>
+
+## Complete CGI Example
+
+```delphi
+program CGI;
+
+{$APPTYPE CONSOLE}
+{$R *.res}
+
+uses Horse;
+
+begin
+  // Need to set "HORSE_CGI" compilation directive
+
+  THorse.Get('/ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong');
+    end);
+
+  THorse.Listen;
+end.
+```
+
+## Advanced CGI Application
+
+```delphi
+program AdvancedCGI;
+
+{$APPTYPE CONSOLE}
+{$R *.res}
+
+uses
+  System.SysUtils,
+  System.Classes,
+  System.JSON,
+  Horse,
+  Horse.Jhonson,
+  Horse.CORS;
+
+begin
+  // Enable CORS
+  THorse.Use(CORS);
+  
+  // Enable JSON middleware
+  THorse.Use(Jhonson);
+
+  // Routes
+  THorse.Get('/health',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('{"status": "healthy", "method": "CGI"}');
+    end);
+
+  THorse.Get('/api/info',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    var
+      Info: TJSONObject;
+    begin
+      Info := TJSONObject.Create;
+      try
+        Info.AddPair('server', 'Horse CGI');
+        Info.AddPair('method', 'CGI/1.1');
+        Info.AddPair('timestamp', DateTimeToStr(Now));
+        
+        // CGI environment variables
+        Info.AddPair('query_string', GetEnvironmentVariable('QUERY_STRING'));
+        Info.AddPair('request_method', GetEnvironmentVariable('REQUEST_METHOD'));
+        Info.AddPair('remote_addr', GetEnvironmentVariable('REMOTE_ADDR'));
+        
+        Res.Send<TJSONObject>(Info);
+      finally
+        Info.Free;
+      end;
+    end);
+
+  THorse.Get('/api/users',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    var
+      Users: TJSONArray;
+      User: TJSONObject;
+    begin
+      Users := TJSONArray.Create;
+      try
+        User := TJSONObject.Create;
+        User.AddPair('id', '1');
+        User.AddPair('name', 'John Doe');
+        Users.AddElement(User);
+        
+        User := TJSONObject.Create;
+        User.AddPair('id', '2');
+        User.AddPair('name', 'Jane Smith');
+        Users.AddElement(User);
+        
+        Res.Send<TJSONArray>(Users);
+      finally
+        Users.Free;
+      end;
+    end);
+
+  THorse.Post('/api/data',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    var
+      Body: TJSONObject;
+      Response: TJSONObject;
+    begin
+      Body := Req.Body<TJSONObject>;
+      
+      Response := TJSONObject.Create;
+      try
+        Response.AddPair('received', 'true');
+        Response.AddPair('timestamp', DateTimeToStr(Now));
+        
+        Res.Status(201).Send<TJSONObject>(Response);
+      finally
+        Response.Free;
+      end;
+    end);
+
+  THorse.Listen;
+end.
+```
+
+## Web Server Configuration
+
+### Apache Configuration
+
+<Tabs>
+  <Tab title="Linux/Unix">
+    ```apache
+    # Enable CGI module
+    LoadModule cgi_module modules/mod_cgi.so
+    
+    # Configure CGI directory
+    ScriptAlias /api/ "/var/www/cgi-bin/"
+    
+    <Directory "/var/www/cgi-bin">
+        Options +ExecCGI
+        AddHandler cgi-script .cgi
+        Require all granted
+    </Directory>
+    
+    # Or configure specific file
+    <Files "cgi">
+        SetHandler cgi-script
+    </Files>
+    ```
+    
+    Deploy your application:
+    ```bash
+    # Copy CGI executable
+    sudo cp CGI /var/www/cgi-bin/api.cgi
+    
+    # Set executable permission
+    sudo chmod +x /var/www/cgi-bin/api.cgi
+    
+    # Set ownership
+    sudo chown www-data:www-data /var/www/cgi-bin/api.cgi
+    
+    # Test
+    curl http://localhost/api/api.cgi/ping
+    ```
+  </Tab>
+  
+  <Tab title="Windows">
+    ```apache
+    # Enable CGI module
+    LoadModule cgi_module modules/mod_cgi.so
+    
+    # Configure CGI directory
+    ScriptAlias /api/ "C:/Apache24/cgi-bin/"
+    
+    <Directory "C:/Apache24/cgi-bin">
+        Options +ExecCGI
+        AddHandler cgi-script .exe
+        Require all granted
+    </Directory>
+    ```
+    
+    Deploy your application:
+    ```powershell
+    # Copy CGI executable
+    copy CGI.exe C:\Apache24\cgi-bin\api.exe
+    
+    # Test
+    curl http://localhost/api/api.exe/ping
+    ```
+  </Tab>
+</Tabs>
+
+### Nginx Configuration
+
+```nginx
+server {
+    listen 80;
+    server_name example.com;
+    
+    location /api {
+        # CGI configuration
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME /var/www/cgi-bin/api.cgi$fastcgi_path_info;
+        fastcgi_param PATH_INFO $fastcgi_path_info;
+        fastcgi_pass unix:/var/run/fcgiwrap.socket;
+    }
+}
+```
+
+<Note>
+Nginx doesn't support CGI natively. Use `fcgiwrap` to enable CGI support:
+```bash
+sudo apt-get install fcgiwrap
+sudo systemctl enable fcgiwrap
+sudo systemctl start fcgiwrap
+```
+</Note>
+
+### IIS Configuration
+
+<Steps>
+  <Step title="Enable CGI Feature">
+    **Server Manager** → **Add Roles and Features** → **Web Server (IIS)** → **Application Development** → ✅ **CGI**
+  </Step>
+  
+  <Step title="Copy Executable">
+    ```powershell
+    copy CGI.exe "C:\inetpub\wwwroot\api\"
+    ```
+  </Step>
+  
+  <Step title="Configure Handler Mapping">
+    **IIS Manager** → Site → **Handler Mappings** → **Add Script Map**
+    
+    - **Request path**: `*.cgi`
+    - **Executable**: `C:\inetpub\wwwroot\api\CGI.exe`
+    - **Name**: `Horse_CGI`
+  </Step>
+  
+  <Step title="Test">
+    Navigate to: `http://localhost/api/CGI.exe/ping`
+  </Step>
+</Steps>
+
+## URL Rewriting for Clean URLs
+
+### Apache .htaccess
+
+```apache
+RewriteEngine On
+RewriteBase /api
+
+# Remove .cgi extension from URL
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ api.cgi/$1 [L,QSA]
+```
+
+This allows:
+```bash
+# Instead of:
+http://localhost/api/api.cgi/ping
+
+# You can use:
+http://localhost/api/ping
+```
+
+### Nginx Rewrite
+
+```nginx
+location /api {
+    rewrite ^/api/(.*)$ /cgi-bin/api.cgi/$1 last;
+}
+```
+
+## CGI Environment Variables
+
+Access standard CGI environment variables:
+
+```delphi
+THorse.Get('/env',
+  procedure(Req: THorseRequest; Res: THorseResponse)
+  var
+    Env: TJSONObject;
+  begin
+    Env := TJSONObject.Create;
+    try
+      // Request information
+      Env.AddPair('REQUEST_METHOD', GetEnvironmentVariable('REQUEST_METHOD'));
+      Env.AddPair('QUERY_STRING', GetEnvironmentVariable('QUERY_STRING'));
+      Env.AddPair('CONTENT_TYPE', GetEnvironmentVariable('CONTENT_TYPE'));
+      Env.AddPair('CONTENT_LENGTH', GetEnvironmentVariable('CONTENT_LENGTH'));
+      
+      // Server information
+      Env.AddPair('SERVER_SOFTWARE', GetEnvironmentVariable('SERVER_SOFTWARE'));
+      Env.AddPair('SERVER_NAME', GetEnvironmentVariable('SERVER_NAME'));
+      Env.AddPair('SERVER_PORT', GetEnvironmentVariable('SERVER_PORT'));
+      Env.AddPair('SERVER_PROTOCOL', GetEnvironmentVariable('SERVER_PROTOCOL'));
+      
+      // Client information
+      Env.AddPair('REMOTE_ADDR', GetEnvironmentVariable('REMOTE_ADDR'));
+      Env.AddPair('REMOTE_HOST', GetEnvironmentVariable('REMOTE_HOST'));
+      Env.AddPair('HTTP_USER_AGENT', GetEnvironmentVariable('HTTP_USER_AGENT'));
+      
+      // Path information
+      Env.AddPair('SCRIPT_NAME', GetEnvironmentVariable('SCRIPT_NAME'));
+      Env.AddPair('PATH_INFO', GetEnvironmentVariable('PATH_INFO'));
+      
+      Res.Send<TJSONObject>(Env);
+    finally
+      Env.Free;
+    end;
+  end);
+```
+
+## Performance Considerations
+
+### Process Overhead
+
+<Warning>
+CGI spawns a new process for each request. This includes:
+- Loading the executable
+- Initializing the runtime
+- Connecting to databases
+- Processing the request
+- Cleaning up resources
+
+For high-traffic applications, consider:
+- FastCGI deployment (using Lazarus)
+- Apache module deployment
+- ISAPI deployment (Windows)
+- Console with reverse proxy
+</Warning>
+
+### Optimization Tips
+
+```delphi
+begin
+  // Minimize initialization code
+  // Configure routes inline
+  
+  THorse.Get('/quick',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      // Quick response
+      Res.Send('OK');
+    end);
+  
+  // Avoid expensive operations in initialization
+  // Don't open persistent database connections
+  
+  THorse.Listen;
+end.
+```
+
+## Debugging CGI Applications
+
+### Enable Error Output
+
+```delphi
+begin
+  try
+    // Your routes
+    THorse.Get('/test',
+      procedure(Req: THorseRequest; Res: THorseResponse)
+      begin
+        Res.Send('Test');
+      end);
+    
+    THorse.Listen;
+  except
+    on E: Exception do
+    begin
+      // Output error to stderr
+      Writeln(ErrOutput, 'Content-Type: text/plain');
+      Writeln(ErrOutput, '');
+      Writeln(ErrOutput, 'Error: ' + E.Message);
+      Writeln(ErrOutput, E.StackTrace);
+    end;
+  end;
+end.
+```
+
+### Check Web Server Logs
+
+```bash
+# Apache error log
+tail -f /var/log/apache2/error.log
+
+# Nginx error log
+tail -f /var/log/nginx/error.log
+
+# IIS logs
+type C:\inetpub\logs\LogFiles\W3SVC1\*.log
+```
+
+### Test from Command Line
+
+```bash
+# Set CGI environment variables manually
+export REQUEST_METHOD=GET
+export QUERY_STRING="id=123"
+export SCRIPT_NAME="/api/test.cgi"
+export PATH_INFO="/ping"
+
+# Run CGI script
+./CGI
+```
+
+## Security Considerations
+
+### Input Validation
+
+```delphi
+THorse.Post('/api/users',
+  procedure(Req: THorseRequest; Res: THorseResponse)
+  var
+    Body: TJSONObject;
+  begin
+    try
+      Body := Req.Body<TJSONObject>;
+      
+      // Validate input
+      if not Body.TryGetValue('name', EmptyStr).IsEmpty then
+      begin
+        // Process valid input
+        Res.Send('{"status": "success"}');
+      end
+      else
+      begin
+        Res.Status(400).Send('{"error": "name required"}');
+      end;
+    except
+      on E: Exception do
+        Res.Status(500).Send('{"error": "Invalid JSON"}');
+    end;
+  end);
+```
+
+### File Permissions (Linux)
+
+```bash
+# Set minimal required permissions
+chmod 755 api.cgi
+
+# Ensure proper ownership
+chown www-data:www-data api.cgi
+
+# Don't make world-writable
+chmod 644 config.ini  # Read-only for others
+```
+
+## Troubleshooting
+
+### Internal Server Error (500)
+
+<Steps>
+  <Step title="Check Executable Permission">
+    ```bash
+    ls -la /var/www/cgi-bin/api.cgi
+    chmod +x /var/www/cgi-bin/api.cgi
+    ```
+  </Step>
+  
+  <Step title="Verify Conditional Define">
+    Ensure `HORSE_CGI` is set in project options
+  </Step>
+  
+  <Step title="Check Dependencies">
+    Ensure all required libraries are available
+  </Step>
+  
+  <Step title="Review Error Logs">
+    ```bash
+    tail -f /var/log/apache2/error.log
+    ```
+  </Step>
+</Steps>
+
+### No Output / Blank Page
+
+```delphi
+// Ensure headers are sent
+THorse.Get('/test',
+  procedure(Req: THorseRequest; Res: THorseResponse)
+  begin
+    Res.ContentType('text/plain');
+    Res.Send('Hello');
+  end);
+```
+
+### Permission Denied
+
+```bash
+# SELinux (if enabled)
+sudo setsebool -P httpd_enable_cgi 1
+sudo chcon -t httpd_sys_script_exec_t /var/www/cgi-bin/api.cgi
+
+# AppArmor
+sudo aa-complain /usr/sbin/apache2
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Console Deployment" icon="terminal" href="/deployment/console">
+    Deploy as standalone console application
+  </Card>
+  <Card title="Apache Module" icon="server" href="/deployment/apache">
+    Better performance with Apache module
+  </Card>
+</CardGroup>

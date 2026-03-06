@@ -1,0 +1,398 @@
+---
+title: HTTP Routing
+description: Learn how to define HTTP routes with GET, POST, PUT, DELETE, PATCH, and HEAD methods in Horse
+---
+
+Horse provides a simple and expressive API for defining HTTP routes. Each HTTP method has a corresponding class method on `THorse` that accepts a path and a callback function.
+
+## Basic Routing
+
+Routes are defined using the HTTP method name followed by a path pattern and a callback procedure:
+
+```delphi
+THorse.Get('/users', 
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.Send('List of users');
+  end);
+```
+
+## HTTP Methods
+
+Horse supports all standard HTTP methods. Each method is defined as a class function in `Horse.Core.pas`.
+
+### GET
+
+Handle GET requests to retrieve resources:
+
+```delphi
+THorse.Get('/ping',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    Res.Send('pong');
+  end);
+
+THorse.Get('/users/:id',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    LUserId: string;
+  begin
+    LUserId := Req.Params['id'];
+    Res.Send('User ID: ' + LUserId);
+  end);
+```
+
+**Signature:**
+```delphi
+class function Get(const APath: string; 
+                   const ACallback: THorseCallback): THorseCore;
+```
+
+### POST
+
+Handle POST requests to create new resources:
+
+```delphi
+THorse.Post('/users',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    LBody: string;
+    LRequest: TJSONObject;
+  begin
+    LBody := Req.Body;
+    LRequest := TJSONObject.ParseJSONValue(LBody) as TJSONObject;
+    try
+      // Process the request
+      Res.Status(THTTPStatus.Created).Send('{"message": "User created"}');
+    finally
+      LRequest.Free;
+    end;
+  end);
+```
+
+**Signature:**
+```delphi
+class function Post(const APath: string; 
+                    const ACallback: THorseCallback): THorseCore;
+```
+
+### PUT
+
+Handle PUT requests to update existing resources:
+
+```delphi
+THorse.Put('/users/:id',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    LUserId: string;
+    LBody: string;
+  begin
+    LUserId := Req.Params['id'];
+    LBody := Req.Body;
+    // Update user logic
+    Res.Send('{"message": "User updated"}');
+  end);
+```
+
+**Signature:**
+```delphi
+class function Put(const APath: string; 
+                   const ACallback: THorseCallback): THorseCore;
+```
+
+### DELETE
+
+Handle DELETE requests to remove resources:
+
+```delphi
+THorse.Delete('/users/:id',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    LUserId: string;
+  begin
+    LUserId := Req.Params['id'];
+    // Delete user logic
+    Res.Status(THTTPStatus.NoContent).Send('');
+  end);
+```
+
+**Signature:**
+```delphi
+class function Delete(const APath: string; 
+                      const ACallback: THorseCallback): THorseCore;
+```
+
+### PATCH
+
+Handle PATCH requests for partial updates:
+
+```delphi
+THorse.Patch('/users/:id',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    LUserId: string;
+    LBody: string;
+  begin
+    LUserId := Req.Params['id'];
+    LBody := Req.Body;
+    // Partial update logic
+    Res.Send('{"message": "User partially updated"}');
+  end);
+```
+
+**Signature:**
+```delphi
+class function Patch(const APath: string; 
+                     const ACallback: THorseCallback): THorseCore;
+```
+
+<Note>
+PATCH is available in Free Pascal and Delphi versions greater than XE3 (CompilerVersion > 27.0).
+</Note>
+
+### HEAD
+
+Handle HEAD requests (similar to GET but without response body):
+
+```delphi
+THorse.Head('/users/:id',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    // Check if resource exists
+    Res.Status(THTTPStatus.OK);
+  end);
+```
+
+**Signature:**
+```delphi
+class function Head(const APath: string; 
+                    const ACallback: THorseCallback): THorseCore;
+```
+
+### All Methods
+
+Register a route handler for all HTTP methods:
+
+```delphi
+THorse.All('/api/*',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  begin
+    // This handles GET, POST, PUT, DELETE, PATCH, HEAD
+    Res.Send('Any method accepted');
+  end);
+```
+
+**Signature:**
+```delphi
+class function All(const APath: string; 
+                   const ACallback: THorseCallback): THorseCore;
+```
+
+## Route Parameters
+
+Route parameters are defined using the `:param` syntax in the path:
+
+```delphi
+THorse.Get('/users/:userId/posts/:postId',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    LUserId, LPostId: string;
+  begin
+    LUserId := Req.Params['userId'];
+    LPostId := Req.Params['postId'];
+    Res.Send(Format('User: %s, Post: %s', [LUserId, LPostId]));
+  end);
+```
+
+### Accessing Parameters
+
+Route parameters are available through `Req.Params`:
+
+```delphi
+var
+  LId: string;
+begin
+  LId := Req.Params['id'];
+  // or check if exists
+  if Req.Params.ContainsKey('id') then
+    LId := Req.Params['id'];
+end;
+```
+
+## Query Strings
+
+Query string parameters are accessed via `Req.Query`:
+
+```delphi
+THorse.Get('/search',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+  var
+    LSearchTerm: string;
+    LPage: string;
+  begin
+    LSearchTerm := Req.Query['q'];
+    LPage := Req.Query['page'];
+    Res.Send(Format('Search: %s, Page: %s', [LSearchTerm, LPage]));
+  end);
+```
+
+<CodeGroup>
+```bash Request
+GET /search?q=horse&page=1
+```
+
+```delphi Handler
+procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+var
+  LQuery: string;
+begin
+  LQuery := Req.Query['q']; // 'horse'
+  Res.Send('Search results for: ' + LQuery);
+end;
+```
+</CodeGroup>
+
+## Callback Signatures
+
+Horse supports multiple callback signatures for convenience:
+
+### Full Callback
+
+The standard callback with Request, Response, and Next:
+
+```delphi
+THorseCallback = procedure(Req: THorseRequest; 
+                           Res: THorseResponse; 
+                           Next: TProc);
+```
+
+### Request and Response Only
+
+```delphi
+THorseCallbackRequestResponse = procedure(Req: THorseRequest; 
+                                          Res: THorseResponse);
+```
+
+### Request Only
+
+```delphi
+THorseCallbackRequest = procedure(Req: THorseRequest);
+```
+
+### Response Only (Delphi only)
+
+```delphi
+THorseCallbackResponse = procedure(Res: THorseResponse);
+```
+
+## Route Method Chaining
+
+Define multiple methods for the same path using `Route()`:
+
+```delphi
+THorse
+  .Route('/users')
+    .Get(DoGetUsers)
+    .Post(DoCreateUser)
+  .Route('/users/:id')
+    .Get(DoGetUser)
+    .Put(DoUpdateUser)
+    .Delete(DoDeleteUser);
+```
+
+## Complete Example
+
+```delphi
+program RestAPI;
+
+uses
+  Horse,
+  System.JSON,
+  System.SysUtils;
+
+begin
+  // List all users
+  THorse.Get('/users',
+    procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+    var
+      LList: TJSONArray;
+    begin
+      LList := TJSONArray.Create;
+      try
+        LList.Add(TJSONObject.Create.AddPair('id', '1').AddPair('name', 'John'));
+        LList.Add(TJSONObject.Create.AddPair('id', '2').AddPair('name', 'Jane'));
+        Res.Send(LList.ToString);
+      finally
+        LList.Free;
+      end;
+    end);
+
+  // Get single user
+  THorse.Get('/users/:id',
+    procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+    var
+      LUserId: string;
+      LUser: TJSONObject;
+    begin
+      LUserId := Req.Params['id'];
+      LUser := TJSONObject.Create;
+      try
+        LUser.AddPair('id', LUserId);
+        LUser.AddPair('name', 'User ' + LUserId);
+        Res.Send(LUser.ToString);
+      finally
+        LUser.Free;
+      end;
+    end);
+
+  // Create user
+  THorse.Post('/users',
+    procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+    var
+      LRequest: TJSONObject;
+      LName: string;
+    begin
+      LRequest := TJSONObject.ParseJSONValue(Req.Body) as TJSONObject;
+      try
+        LName := LRequest.GetValue('name').Value;
+        Res.Status(THTTPStatus.Created)
+           .Send('{"message": "User ' + LName + ' created"}');
+      finally
+        LRequest.Free;
+      end;
+    end);
+
+  // Update user
+  THorse.Put('/users/:id',
+    procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+    var
+      LUserId: string;
+    begin
+      LUserId := Req.Params['id'];
+      Res.Send('{"message": "User ' + LUserId + ' updated"}');
+    end);
+
+  // Delete user
+  THorse.Delete('/users/:id',
+    procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+    begin
+      Res.Status(THTTPStatus.NoContent).Send('');
+    end);
+
+  THorse.Listen(9000);
+end.
+```
+
+## Path Normalization
+
+Horse automatically normalizes paths by trimming leading and trailing slashes:
+
+```delphi
+// These are all equivalent:
+THorse.Get('/users', Handler);
+THorse.Get('users', Handler);
+THorse.Get('/users/', Handler);
+THorse.Get('users/', Handler);
+```
+
+The internal `TrimPath` function in `Horse.Core.pas:229` ensures consistent path handling.

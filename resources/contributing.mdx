@@ -1,0 +1,605 @@
+---
+title: Contributing to Horse
+description: Learn how to contribute to Horse through bug reports, feature requests, code contributions, and community involvement
+---
+
+Horse is an open-source project that thrives on community contributions. Whether you're reporting bugs, suggesting features, improving documentation, or submitting code, your contributions are valuable and appreciated.
+
+## Ways to Contribute
+
+<CardGroup cols={2}>
+  <Card title="Report Bugs" icon="bug">
+    Help identify and fix issues in Horse
+  </Card>
+  
+  <Card title="Request Features" icon="lightbulb">
+    Suggest new features and improvements
+  </Card>
+  
+  <Card title="Submit Code" icon="code">
+    Contribute bug fixes and new features
+  </Card>
+  
+  <Card title="Improve Documentation" icon="book">
+    Help make Horse easier to learn and use
+  </Card>
+</CardGroup>
+
+## Getting Started
+
+### Fork and Clone
+
+Start by forking the Horse repository to your GitHub account:
+
+<Steps>
+  <Step title="Fork the repository">
+    Visit [github.com/HashLoad/horse](https://github.com/HashLoad/horse) and click the "Fork" button.
+  </Step>
+  
+  <Step title="Clone your fork">
+    ```bash
+    git clone https://github.com/YOUR-USERNAME/horse.git
+    cd horse
+    ```
+  </Step>
+  
+  <Step title="Add upstream remote">
+    ```bash
+    git remote add upstream https://github.com/HashLoad/horse.git
+    ```
+  </Step>
+  
+  <Step title="Create a branch">
+    ```bash
+    git checkout -b feature/my-new-feature
+    ```
+  </Step>
+</Steps>
+
+### Development Environment
+
+Horse can be developed using either Delphi or Lazarus:
+
+<Tabs>
+  <Tab title="Delphi">
+    **Requirements:**
+    - Delphi XE7 or later
+    - Boss package manager (recommended)
+    
+    **Setup:**
+    ```bash
+    # Install dependencies with Boss
+    boss install
+    ```
+    
+    Open `Horse.dproj` in Delphi IDE and build the project.
+  </Tab>
+  
+  <Tab title="Lazarus">
+    **Requirements:**
+    - Free Pascal Compiler 3.2.0+
+    - Lazarus IDE 2.0.0+
+    
+    **Setup:**
+    ```bash
+    # Install dependencies
+    boss install
+    ```
+    
+    Open `Horse.lpk` in Lazarus and compile the package.
+  </Tab>
+</Tabs>
+
+## Reporting Issues
+
+Good bug reports help maintainers understand and fix issues quickly.
+
+### Before Creating an Issue
+
+<AccordionGroup>
+  <Accordion title="Search existing issues">
+    Check if someone has already reported the same issue:
+    
+    1. Visit [Horse Issues](https://github.com/HashLoad/horse/issues)
+    2. Search for keywords related to your problem
+    3. Check both open and closed issues
+  </Accordion>
+  
+  <Accordion title="Verify the bug">
+    Make sure it's actually a bug:
+    
+    - Try with the latest version of Horse
+    - Test with a minimal example
+    - Check if it works in a fresh project
+    - Review the documentation to ensure you're using it correctly
+  </Accordion>
+  
+  <Accordion title="Gather information">
+    Collect relevant details:
+    
+    - Horse version
+    - Delphi/Lazarus version
+    - Operating system
+    - Steps to reproduce
+    - Expected vs actual behavior
+  </Accordion>
+</AccordionGroup>
+
+### Creating a Bug Report
+
+<Card title="Create New Issue" icon="github" href="https://github.com/HashLoad/horse/issues/new">
+  Open a new issue on GitHub
+</Card>
+
+**Include in your report:**
+
+```markdown
+## Description
+A clear description of the bug.
+
+## Environment
+- Horse Version: 3.0.0
+- Delphi Version: 11.3 Alexandria
+- OS: Windows 11
+- Compilation Directive: HORSE_VCL
+
+## Steps to Reproduce
+1. Create a new console application
+2. Add the following code...
+3. Run the application
+4. Send a GET request to /endpoint
+
+## Expected Behavior
+The server should return a 200 OK response.
+
+## Actual Behavior
+The server returns a 500 Internal Server Error.
+
+## Code Sample
+```delphi
+uses Horse;
+
+begin
+  THorse.Get('/endpoint',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      // Bug occurs here
+      Res.Send('test');
+    end);
+  
+  THorse.Listen(9000);
+end.
+```
+
+## Additional Context
+Error message or stack trace if available.
+```
+
+<Note>
+The more details you provide, the easier it is to diagnose and fix the issue.
+</Note>
+
+## Suggesting Features
+
+Feature requests help shape the future of Horse.
+
+### Creating a Feature Request
+
+<Steps>
+  <Step title="Check existing requests">
+    Search [issues](https://github.com/HashLoad/horse/issues) to see if someone already suggested it.
+  </Step>
+  
+  <Step title="Describe the use case">
+    Explain what problem your feature would solve and why it's valuable.
+  </Step>
+  
+  <Step title="Propose a solution">
+    Suggest how the feature might work, including API design if applicable.
+  </Step>
+  
+  <Step title="Consider alternatives">
+    Mention other ways the problem could be solved or workarounds you've tried.
+  </Step>
+</Steps>
+
+**Feature request template:**
+
+```markdown
+## Feature Request
+
+### Problem Statement
+As a Horse developer, I often need to [describe problem]...
+
+### Proposed Solution
+Add a new method/middleware that allows [describe solution].
+
+### Example Usage
+    THorse.Use(NewFeature(options));
+
+### Alternatives Considered
+- Workaround A: [description and limitations]
+- Workaround B: [description and limitations]
+
+### Benefits
+- Simplifies common use case
+- Improves developer experience
+- Aligns with Express.js patterns
+```
+
+## Contributing Code
+
+### Coding Standards
+
+Follow these conventions to maintain code consistency:
+
+<Tabs>
+  <Tab title="Style">
+    **Naming Conventions:**
+    ```delphi
+    // Classes: TPascalCase
+    type
+      THorseRequest = class
+      end;
+    
+    // Methods: PascalCase
+    procedure ProcessRequest;
+    
+    // Variables: PascalCase or camelCase for local vars
+    var
+      RequestData: string;
+      localVar: Integer;
+    
+    // Constants: Pascal_Snake_Case or PascalCase
+    const
+      DEFAULT_PORT = 9000;
+    ```
+    
+    **Indentation:**
+    - Use 2 spaces for indentation
+    - No tabs
+    
+    **Line Length:**
+    - Keep lines under 120 characters when practical
+  </Tab>
+  
+  <Tab title="Documentation">
+    **Document public APIs:**
+    ```delphi
+    /// Summary:
+    /// Sends a response with the specified content.
+    ///
+    /// Param: AContent - The content to send
+    /// Returns: Self for method chaining
+    function Send(const AContent: string): THorseResponse;
+    ```
+    
+    **Add inline comments for complex logic:**
+    ```delphi
+    // Calculate timeout with exponential backoff
+    Timeout := BaseTimeout * Power(2, RetryCount);
+    ```
+  </Tab>
+  
+  <Tab title="Structure">
+    **Keep methods focused:**
+    - One responsibility per method
+    - Extract complex logic into separate methods
+    
+    **Use meaningful names:**
+    ```delphi
+    // Good
+    procedure ValidateRequestHeaders;
+    
+    // Avoid
+    procedure DoStuff;
+    ```
+    
+    **Handle errors properly:**
+    ```delphi
+    try
+      // Operation
+    except
+      on E: Exception do
+      begin
+        // Meaningful error handling
+        raise EHorseException.Create('Failed to process: ' + E.Message);
+      end;
+    end;
+    ```
+  </Tab>
+</Tabs>
+
+### Testing
+
+Test your changes before submitting:
+
+<Steps>
+  <Step title="Unit tests">
+    Run existing tests to ensure nothing breaks:
+    ```bash
+    # Run test suite
+    dcc32 Tests.dpr
+    ./Tests.exe
+    ```
+  </Step>
+  
+  <Step title="Add new tests">
+    Include tests for new functionality:
+    ```delphi
+    procedure TestNewFeature;
+    begin
+      // Arrange
+      var Request := CreateMockRequest;
+      
+      // Act
+      var Result := MyNewFunction(Request);
+      
+      // Assert
+      Assert.AreEqual('expected', Result);
+    end;
+    ```
+  </Step>
+  
+  <Step title="Manual testing">
+    Test your changes in a real application with different scenarios.
+  </Step>
+  
+  <Step title="Cross-platform testing">
+    If possible, test on both Windows and Linux, and with both Delphi and Lazarus.
+  </Step>
+</Steps>
+
+<Note>
+Horse aims for high test coverage. Current coverage:
+- Console: 45%
+- VCL: 43%
+
+Help improve these numbers!
+</Note>
+
+### Submitting a Pull Request
+
+<Steps>
+  <Step title="Commit your changes">
+    Write clear, descriptive commit messages:
+    ```bash
+    git add .
+    git commit -m "Add support for custom error handlers
+    
+    - Implement OnError callback in THorse
+    - Add example in samples/console
+    - Update documentation"
+    ```
+  </Step>
+  
+  <Step title="Push to your fork">
+    ```bash
+    git push origin feature/my-new-feature
+    ```
+  </Step>
+  
+  <Step title="Create pull request">
+    1. Go to your fork on GitHub
+    2. Click "Pull Request"
+    3. Select your branch
+    4. Fill out the PR template
+  </Step>
+  
+  <Step title="Respond to feedback">
+    Maintainers may request changes. Address feedback promptly and professionally.
+  </Step>
+</Steps>
+
+**Pull Request Template:**
+
+```markdown
+## Description
+Brief description of what this PR does.
+
+## Related Issue
+Closes #123
+
+## Changes Made
+- Added X feature
+- Fixed Y bug
+- Updated Z documentation
+
+## Testing
+- [ ] Unit tests pass
+- [ ] Manual testing completed
+- [ ] Tested on Delphi
+- [ ] Tested on Lazarus
+- [ ] Documentation updated
+
+## Breaking Changes
+None / [describe any breaking changes]
+
+## Screenshots
+[if applicable]
+```
+
+### Pull Request Guidelines
+
+<AccordionGroup>
+  <Accordion title="Keep PRs focused">
+    - One feature or fix per PR
+    - Avoid mixing unrelated changes
+    - Split large changes into multiple PRs if needed
+  </Accordion>
+  
+  <Accordion title="Update documentation">
+    - Add XML doc comments for public APIs
+    - Update README if behavior changes
+    - Include code examples for new features
+  </Accordion>
+  
+  <Accordion title="Maintain compatibility">
+    - Avoid breaking existing APIs unless absolutely necessary
+    - If breaking changes are needed, document them clearly
+    - Consider deprecation warnings before removal
+  </Accordion>
+  
+  <Accordion title="Follow commit conventions">
+    Use clear commit message prefixes:
+    - `feat:` for new features
+    - `fix:` for bug fixes
+    - `docs:` for documentation
+    - `refactor:` for code restructuring
+    - `test:` for test additions/changes
+    - `chore:` for maintenance tasks
+  </Accordion>
+</AccordionGroup>
+
+## Creating Middlewares
+
+Extend Horse functionality by creating middlewares:
+
+### Middleware Structure
+
+```delphi
+unit Horse.MyMiddleware;
+
+interface
+
+uses
+  Horse;
+
+function MyMiddleware: THorseCallback; overload;
+function MyMiddleware(const AOptions: string): THorseCallback; overload;
+
+implementation
+
+function MyMiddleware: THorseCallback;
+begin
+  Result := MyMiddleware('default');
+end;
+
+function MyMiddleware(const AOptions: string): THorseCallback;
+begin
+  Result :=
+    procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+    begin
+      // Pre-processing
+      try
+        // Your middleware logic here
+        
+        // Call next middleware in chain
+        Next;
+        
+        // Post-processing (optional)
+      except
+        on E: Exception do
+        begin
+          Res.Status(500).Send('Middleware error: ' + E.Message);
+        end;
+      end;
+    end;
+end;
+
+end.
+```
+
+### Publishing Your Middleware
+
+<Steps>
+  <Step title="Create repository">
+    Host your middleware on GitHub with:
+    - Clear README with installation and usage
+    - License file (MIT recommended)
+    - Sample application
+    - Boss configuration if applicable
+  </Step>
+  
+  <Step title="Add to community list">
+    Submit a PR to add your middleware to the [Horse README](https://github.com/HashLoad/horse).
+  </Step>
+  
+  <Step title="Announce it">
+    Share your middleware in the [Telegram channel](https://t.me/hashload).
+  </Step>
+</Steps>
+
+## Community Guidelines
+
+### Code of Conduct
+
+Be respectful and professional:
+
+- Be welcoming and inclusive
+- Respect differing viewpoints
+- Accept constructive criticism gracefully
+- Focus on what's best for the community
+- Show empathy towards other members
+
+### Getting Help
+
+<CardGroup cols={2}>
+  <Card title="Telegram Community" icon="telegram" href="https://t.me/hashload">
+    Ask questions and get help from other developers
+  </Card>
+  
+  <Card title="GitHub Discussions" icon="github" href="https://github.com/HashLoad/horse/discussions">
+    Start discussions about features and ideas
+  </Card>
+</CardGroup>
+
+### Staying Updated
+
+<Steps>
+  <Step title="Watch the repository">
+    Click "Watch" on [GitHub](https://github.com/HashLoad/horse) to get notified of updates.
+  </Step>
+  
+  <Step title="Join Telegram">
+    Connect with the community on [Telegram](https://t.me/hashload).
+  </Step>
+  
+  <Step title="Follow releases">
+    Subscribe to release notifications to stay current with new versions.
+  </Step>
+</Steps>
+
+## License
+
+Horse is licensed under the MIT License. By contributing, you agree that your contributions will be licensed under the same terms.
+
+**MIT License Summary:**
+- Commercial use allowed
+- Modification allowed
+- Distribution allowed
+- Private use allowed
+- No warranty provided
+
+<Card title="View Full License" icon="scale-balanced" href="https://github.com/HashLoad/horse/blob/master/LICENSE">
+  Read the complete MIT License text
+</Card>
+
+## Recognition
+
+Contributors are recognized in several ways:
+
+- Listed in the GitHub contributors graph
+- Mentioned in release notes for significant contributions
+- Community acknowledgment on Telegram
+- Profile linked in the README (for major contributors)
+
+<Card title="View Contributors" icon="users" href="https://github.com/Hashload/horse/graphs/contributors">
+  See all Horse contributors
+</Card>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Explore Examples" href="/resources/examples" icon="code">
+    Learn from real-world Horse applications
+  </Card>
+  
+  <Card title="Browse Ecosystem" href="/resources/ecosystem" icon="puzzle-piece">
+    Discover middlewares and tools
+  </Card>
+</CardGroup>
+
+<Note>
+Thank you for contributing to Horse! Every contribution, no matter how small, helps make Horse better for everyone.
+</Note>

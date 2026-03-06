@@ -1,0 +1,388 @@
+---
+title: 'Third-Party Middlewares'
+description: 'Community-created Horse middleware packages'
+---
+
+## Overview
+
+The Horse community has created numerous third-party middleware packages that extend the framework's capabilities. These middlewares are maintained by individual developers and organizations.
+
+<Note>
+  Third-party middlewares may have different levels of maintenance and support. Always check the repository for the latest updates and compatibility information.
+</Note>
+
+## Available Middlewares
+
+### bittencourtthulio/etag
+
+ETag header generation for caching support.
+
+- **Repository:** [github.com/bittencourtthulio/Horse-ETag](https://github.com/bittencourtthulio/Horse-ETag)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ✔️ Supported
+
+**Features:**
+- Automatic ETag generation
+- HTTP 304 Not Modified responses
+- Caching optimization
+
+### bittencourtthulio/paginate
+
+Pagination middleware for list responses.
+
+- **Repository:** [github.com/bittencourtthulio/Horse-Paginate](https://github.com/bittencourtthulio/Horse-Paginate)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ✔️ Supported
+
+**Features:**
+- Easy pagination implementation
+- Configurable page size
+- Pagination metadata in responses
+
+### bittencourtthulio/cachecontrol
+
+Cache-Control header management.
+
+- **Repository:** [github.com/bittencourtthulio/horse-cachecontrol](https://github.com/bittencourtthulio/horse-cachecontrol)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ❌ Not supported
+
+**Features:**
+- Cache-Control header configuration
+- Max-age, no-cache, and other directives
+- Route-specific caching rules
+
+### gabrielbaltazar/gbswagger
+
+Swagger/OpenAPI documentation generation.
+
+- **Repository:** [github.com/gabrielbaltazar/gbswagger](https://github.com/gabrielbaltazar/gbswagger)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ❌ Not supported
+
+**Features:**
+- Automatic API documentation
+- Swagger UI integration
+- OpenAPI 3.0 specification
+
+### willhubner/socketIO
+
+Socket.IO support for real-time communication.
+
+- **Repository:** [github.com/WillHubner/Horse-SocketIO](https://github.com/WillHubner/Horse-SocketIO)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ❌ Not supported
+
+**Features:**
+- Real-time bidirectional communication
+- Socket.IO protocol support
+- Event-based messaging
+
+### dliocode/ratelimit
+
+Rate limiting middleware to prevent abuse.
+
+- **Repository:** [github.com/dliocode/horse-ratelimit](https://github.com/dliocode/horse-ratelimit)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ❌ Not supported
+
+**Features:**
+- Request rate limiting
+- Configurable time windows
+- Per-IP or per-user limits
+- Custom response for exceeded limits
+
+### dliocode/slowdown
+
+Progressively slow down responses after limit.
+
+- **Repository:** [github.com/dliocode/horse-slowdown](https://github.com/dliocode/horse-slowdown)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ❌ Not supported
+
+**Features:**
+- Gradual response slowdown
+- Alternative to hard rate limiting
+- Configurable delay increments
+
+### giorgiobazzo/upload
+
+File upload handling middleware.
+
+- **Repository:** [github.com/giorgiobazzo/horse-upload](https://github.com/giorgiobazzo/horse-upload)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ❌ Not supported
+
+**Features:**
+- Multipart file upload handling
+- File size limits
+- File type validation
+
+### dliocode/query
+
+Advanced query string parsing.
+
+- **Repository:** [github.com/dliocode/horse-query](https://github.com/dliocode/horse-query)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ❌ Not supported
+
+**Features:**
+- Enhanced query parameter parsing
+- Nested object support
+- Array parameter handling
+
+### CarlosHe/healthcheck
+
+Health check endpoint for monitoring.
+
+- **Repository:** [github.com/CarlosHe/horse-healthcheck](https://github.com/CarlosHe/horse-healthcheck)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ❌ Not supported
+
+**Features:**
+- Standard health check endpoint
+- Custom health checks
+- Service status monitoring
+
+### CarlosHe/staticfiles
+
+Static file serving middleware.
+
+- **Repository:** [github.com/CarlosHe/horse-staticfiles](https://github.com/CarlosHe/horse-staticfiles)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ❌ Not supported
+
+**Features:**
+- Serve static files from directory
+- MIME type detection
+- Caching support
+
+### CachopaWeb/horse-server-static
+
+Alternative static file server.
+
+- **Repository:** [github.com/CachopaWeb/horse-server-static](https://github.com/CachopaWeb/horse-server-static)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ✔️ Supported
+
+**Features:**
+- Static content serving
+- Directory browsing (optional)
+- Index file support
+
+### arvanus/horse-exception-logger
+
+Enhanced exception logging.
+
+- **Repository:** [github.com/arvanus/horse-exception-logger](https://github.com/arvanus/horse-exception-logger)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ✔️ Supported
+
+**Features:**
+- Detailed exception logging
+- Stack trace capture
+- Custom log formatters
+
+### claudneysessa/Horse-CSResponsePagination
+
+Advanced pagination with custom response format.
+
+- **Repository:** [github.com/claudneysessa/Horse-CSResponsePagination](https://github.com/claudneysessa/Horse-CSResponsePagination)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ❌ Not supported
+
+**Features:**
+- Standardized pagination response
+- Metadata inclusion
+- Navigation links
+
+### claudneysessa/Horse-XSuperObjects
+
+XSuperObject JSON library integration.
+
+- **Repository:** [github.com/claudneysessa/Horse-XSuperObjects](https://github.com/claudneysessa/Horse-XSuperObjects)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ❌ Not supported
+
+**Features:**
+- XSuperObject JSON serialization
+- Alternative to Jhonson
+- High performance JSON processing
+
+### andre-djsystem/horse-bearer-auth
+
+Bearer token authentication.
+
+- **Repository:** [github.com/andre-djsystem/horse-bearer-auth](https://github.com/andre-djsystem/horse-bearer-auth)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ✔️ Supported
+
+**Features:**
+- Bearer token validation
+- Custom validation callback
+- Authorization header parsing
+
+### andre-djsystem/horse-manipulate-request
+
+Request manipulation utilities.
+
+- **Repository:** [github.com/andre-djsystem/horse-manipulate-request](https://github.com/andre-djsystem/horse-manipulate-request)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ✔️ Supported
+
+**Features:**
+- Modify request data
+- Request transformation
+- Pre-processing utilities
+
+### andre-djsystem/horse-manipulate-response
+
+Response manipulation utilities.
+
+- **Repository:** [github.com/andre-djsystem/horse-manipulate-response](https://github.com/andre-djsystem/horse-manipulate-response)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ✔️ Supported
+
+**Features:**
+- Modify response data
+- Response transformation
+- Post-processing utilities
+
+### antoniojmsjr/Horse-IPGeoLocation
+
+IP geolocation lookup.
+
+- **Repository:** [github.com/antoniojmsjr/Horse-IPGeoLocation](https://github.com/antoniojmsjr/Horse-IPGeoLocation)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ❌ Not supported
+
+**Features:**
+- IP address geolocation
+- Country/region detection
+- Integration with geolocation APIs
+
+### antoniojmsjr/Horse-XMLDoc
+
+XML document handling.
+
+- **Repository:** [github.com/antoniojmsjr/Horse-XMLDoc](https://github.com/antoniojmsjr/Horse-XMLDoc)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ❌ Not supported
+
+**Features:**
+- XML request/response handling
+- XML serialization/deserialization
+- Alternative to JSON
+
+### isaquepinheiro/horse-jsonbr
+
+JSONBr library integration.
+
+- **Repository:** [github.com/HashLoad/JSONBr](https://github.com/HashLoad/JSONBr)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ❌ Not supported
+
+**Features:**
+- JSONBr serialization
+- Brazilian Portuguese locale support
+- Date/time formatting
+
+### IagooCesaar/Horse-JsonInterceptor
+
+JSON request/response interception.
+
+- **Repository:** [github.com/IagooCesaar/Horse-JsonInterceptor](https://github.com/IagooCesaar/Horse-JsonInterceptor)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ❌ Not supported
+
+**Features:**
+- Intercept JSON data
+- Transform JSON payloads
+- Validation and sanitization
+
+### dliocode/horse-datalogger
+
+DataLogger integration for advanced logging.
+
+- **Repository:** [github.com/dliocode/horse-datalogger](https://github.com/dliocode/horse-datalogger)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ❌ Not supported
+
+**Features:**
+- Advanced logging capabilities
+- Multiple output providers
+- Structured logging
+
+### marcobreveglieri/horse-prometheus-metrics
+
+Prometheus metrics exporter.
+
+- **Repository:** [github.com/marcobreveglieri/horse-prometheus-metrics](https://github.com/marcobreveglieri/horse-prometheus-metrics)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ❌ Not supported
+
+**Features:**
+- Prometheus metrics endpoint
+- Request/response metrics
+- Custom metrics support
+
+### weslleycapelari/horse-documentation
+
+API documentation generator.
+
+- **Repository:** [github.com/weslleycapelari/horse-documentation](https://github.com/weslleycapelari/horse-documentation)
+- **Delphi:** ✔️ Supported
+- **Lazarus:** ❌ Not supported
+
+**Features:**
+- Automatic documentation generation
+- Custom templates
+- Multiple output formats
+
+## Compatibility Matrix
+
+| Middleware | Delphi | Lazarus |
+|------------|--------|----------|
+| bittencourtthulio/etag | ✔️ | ✔️ |
+| bittencourtthulio/paginate | ✔️ | ✔️ |
+| bittencourtthulio/cachecontrol | ✔️ | ❌ |
+| gabrielbaltazar/gbswagger | ✔️ | ❌ |
+| willhubner/socketIO | ✔️ | ❌ |
+| dliocode/ratelimit | ✔️ | ❌ |
+| dliocode/slowdown | ✔️ | ❌ |
+| giorgiobazzo/upload | ✔️ | ❌ |
+| dliocode/query | ✔️ | ❌ |
+| CarlosHe/healthcheck | ✔️ | ❌ |
+| CarlosHe/staticfiles | ✔️ | ❌ |
+| CachopaWeb/horse-server-static | ✔️ | ✔️ |
+| arvanus/horse-exception-logger | ✔️ | ✔️ |
+| claudneysessa/Horse-CSResponsePagination | ✔️ | ❌ |
+| claudneysessa/Horse-XSuperObjects | ✔️ | ❌ |
+| andre-djsystem/horse-bearer-auth | ✔️ | ✔️ |
+| andre-djsystem/horse-manipulate-request | ✔️ | ✔️ |
+| andre-djsystem/horse-manipulate-response | ✔️ | ✔️ |
+| antoniojmsjr/Horse-IPGeoLocation | ✔️ | ❌ |
+| antoniojmsjr/Horse-XMLDoc | ✔️ | ❌ |
+| isaquepinheiro/horse-jsonbr | ✔️ | ❌ |
+| IagooCesaar/Horse-JsonInterceptor | ✔️ | ❌ |
+| dliocode/horse-datalogger | ✔️ | ❌ |
+| marcobreveglieri/horse-prometheus-metrics | ✔️ | ❌ |
+| weslleycapelari/horse-documentation | ✔️ | ❌ |
+
+## Contributing Your Middleware
+
+If you've created a Horse middleware and want it listed here:
+
+1. Create a pull request to the [Horse repository](https://github.com/HashLoad/horse)
+2. Add your middleware to the README.md
+3. Include:
+   - Middleware name and description
+   - Repository link
+   - Delphi/Lazarus compatibility
+   - Basic usage example
+
+## See Also
+
+- [Official Middlewares](/api/middlewares/official) - Officially maintained middlewares
+- [THorse](/api/thorse) - Main framework API
+- [Callbacks](/api/callbacks) - Middleware callback types

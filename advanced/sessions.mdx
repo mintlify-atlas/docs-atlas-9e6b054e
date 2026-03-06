@@ -1,0 +1,393 @@
+---
+title: Session Management
+description: Learn how to manage user sessions and store custom data across requests in Horse
+---
+
+# Session Management
+
+Horse provides a flexible session management system that allows you to store and retrieve custom data objects across multiple requests. The session system is type-safe and integrated directly into the request object.
+
+## Overview
+
+The session system in Horse consists of two main components:
+
+- **THorseSessions**: A session container that stores multiple session objects by their class type
+- **TSession**: Base class for creating custom session objects
+
+<Note>
+Sessions in Horse are stored per-request and must be managed by middleware or your application logic. Horse does not provide automatic persistence or expiration - you'll need to implement this using a middleware or external session store.
+</Note>
+
+## Basic Session Usage
+
+### Creating a Custom Session Class
+
+To use sessions, first create a custom class that inherits from `TSession`:
+
+```delphi
+uses
+  Horse, Horse.Session;
+
+type
+  TUserSession = class(TSession)
+  private
+    FUserId: Integer;
+    FUsername: string;
+    FIsAuthenticated: Boolean;
+  public
+    property UserId: Integer read FUserId write FUserId;
+    property Username: string read FUsername write FUsername;
+    property IsAuthenticated: Boolean read FIsAuthenticated write FIsAuthenticated;
+  end;
+```
+
+### Setting Session Data
+
+You can set session data using the `Sessions.SetSession` method:
+
+```delphi
+THorse.Get('/login',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LUserSession: TUserSession;
+  begin
+    LUserSession := TUserSession.Create;
+    LUserSession.UserId := 123;
+    LUserSession.Username := 'john.doe';
+    LUserSession.IsAuthenticated := True;
+    
+    // Store session in the request
+    Req.Sessions.SetSession(TUserSession, LUserSession);
+    
+    Res.Send('User logged in successfully');
+  end);
+```
+
+<Warning>
+The `THorseSessions` container owns the session objects. When you call `SetSession`, ownership is transferred to the container, which will free the object when appropriate. Do not manually free session objects after adding them.
+</Warning>
+
+### Retrieving Session Data
+
+There are multiple ways to retrieve session data:
+
+#### Using TryGetSession (Recommended)
+
+```delphi
+THorse.Get('/profile',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LUserSession: TUserSession;
+  begin
+    if Req.Sessions.TryGetSession<TUserSession>(LUserSession) then
+    begin
+      if LUserSession.IsAuthenticated then
+        Res.Send('Welcome, ' + LUserSession.Username)
+      else
+        Res.Status(THTTPStatus.Unauthorized).Send('Not authenticated');
+    end
+    else
+      Res.Status(THTTPStatus.Unauthorized).Send('No session found');
+  end);
+```
+
+#### Using the Session Property
+
+```delphi
+THorse.Get('/user-data',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LSession: TSession;
+    LUserSession: TUserSession;
+  begin
+    if Req.Sessions.Contains(TUserSession) then
+    begin
+      LSession := Req.Sessions.Session[TUserSession];
+      LUserSession := TUserSession(LSession);
+      Res.Send('User ID: ' + LUserSession.UserId.ToString);
+    end
+    else
+      Res.Status(THTTPStatus.NotFound).Send('Session not found');
+  end);
+```
+
+### Checking Session Existence
+
+Use the `Contains` method to check if a session exists:
+
+```delphi
+if Req.Sessions.Contains(TUserSession) then
+  // Session exists
+else
+  // Session does not exist
+```
+
+## Session Middleware Pattern
+
+A common pattern is to create middleware that loads sessions from a persistent store:
+
+```delphi
+uses
+  Horse, Horse.Session;
+
+type
+  TUserSession = class(TSession)
+  private
+    FUserId: Integer;
+    FToken: string;
+  public
+    property UserId: Integer read FUserId write FUserId;
+    property Token: string read FToken write FToken;
+  end;
+
+procedure SessionMiddleware(Req: THorseRequest; Res: THorseResponse; Next: TNextProc);
+var
+  LToken: string;
+  LUserSession: TUserSession;
+  LUserId: Integer;
+begin
+  // Get token from header
+  LToken := Req.Headers['Authorization'];
+  
+  if LToken <> '' then
+  begin
+    // Validate token and get user ID from your authentication system
+    if ValidateTokenAndGetUserId(LToken, LUserId) then
+    begin
+      LUserSession := TUserSession.Create;
+      LUserSession.UserId := LUserId;
+      LUserSession.Token := LToken;
+      Req.Sessions.SetSession(TUserSession, LUserSession);
+    end;
+  end;
+  
+  Next();
+end;
+
+begin
+  // Apply middleware globally
+  THorse.Use(SessionMiddleware);
+  
+  // Protected route
+  THorse.Get('/api/user/profile',
+    procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+    var
+      LUserSession: TUserSession;
+    begin
+      if not Req.Sessions.TryGetSession<TUserSession>(LUserSession) then
+      begin
+        Res.Status(THTTPStatus.Unauthorized).Send('Unauthorized');
+        Exit;
+      end;
+      
+      // User is authenticated, proceed with request
+      Res.Send('Profile for user: ' + LUserSession.UserId.ToString);
+    end);
+  
+  THorse.Listen(9000);
+end.
+```
+
+## Multiple Session Types
+
+You can store multiple session types simultaneously:
+
+```delphi
+type
+  TUserSession = class(TSession)
+  private
+    FUserId: Integer;
+  public
+    property UserId: Integer read FUserId write FUserId;
+  end;
+  
+  TShoppingCartSession = class(TSession)
+  private
+    FItems: TStringList;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    property Items: TStringList read FItems;
+  end;
+
+constructor TShoppingCartSession.Create;
+begin
+  inherited Create;
+  FItems := TStringList.Create;
+end;
+
+destructor TShoppingCartSession.Destroy;
+begin
+  FItems.Free;
+  inherited;
+end;
+
+// Usage
+THorse.Post('/cart/add',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  var
+    LCartSession: TShoppingCartSession;
+  begin
+    // Try to get existing cart session
+    if not Req.Sessions.TryGetSession<TShoppingCartSession>(LCartSession) then
+    begin
+      // Create new cart session if it doesn't exist
+      LCartSession := TShoppingCartSession.Create;
+      Req.Sessions.SetSession(TShoppingCartSession, LCartSession);
+    end;
+    
+    // Add item to cart
+    LCartSession.Items.Add(Req.Body);
+    Res.Send('Item added to cart');
+  end);
+```
+
+## Advanced Patterns
+
+### Session Authentication Helper
+
+<Accordion title="Complete Authentication Helper Example">
+
+```delphi
+unit MyApp.Auth;
+
+interface
+
+uses
+  Horse, Horse.Session;
+
+type
+  TUserSession = class(TSession)
+  private
+    FUserId: Integer;
+    FEmail: string;
+    FRoles: TArray<string>;
+  public
+    property UserId: Integer read FUserId write FUserId;
+    property Email: string read FEmail write FEmail;
+    property Roles: TArray<string> read FRoles write FRoles;
+    function HasRole(const ARole: string): Boolean;
+  end;
+
+function GetCurrentUser(AReq: THorseRequest; out AUser: TUserSession): Boolean;
+function RequireAuth(AReq: THorseRequest; ARes: THorseResponse): Boolean;
+function RequireRole(AReq: THorseRequest; ARes: THorseResponse; const ARole: string): Boolean;
+
+implementation
+
+function TUserSession.HasRole(const ARole: string): Boolean;
+var
+  LRole: string;
+begin
+  Result := False;
+  for LRole in FRoles do
+  begin
+    if LRole = ARole then
+      Exit(True);
+  end;
+end;
+
+function GetCurrentUser(AReq: THorseRequest; out AUser: TUserSession): Boolean;
+begin
+  Result := AReq.Sessions.TryGetSession<TUserSession>(AUser);
+end;
+
+function RequireAuth(AReq: THorseRequest; ARes: THorseResponse): Boolean;
+var
+  LUser: TUserSession;
+begin
+  Result := GetCurrentUser(AReq, LUser);
+  if not Result then
+    ARes.Status(THTTPStatus.Unauthorized).Send('Authentication required');
+end;
+
+function RequireRole(AReq: THorseRequest; ARes: THorseResponse; const ARole: string): Boolean;
+var
+  LUser: TUserSession;
+begin
+  if not GetCurrentUser(AReq, LUser) then
+  begin
+    ARes.Status(THTTPStatus.Unauthorized).Send('Authentication required');
+    Exit(False);
+  end;
+  
+  Result := LUser.HasRole(ARole);
+  if not Result then
+    ARes.Status(THTTPStatus.Forbidden).Send('Insufficient permissions');
+end;
+
+end.
+```
+
+Usage:
+
+```delphi
+THorse.Get('/admin/users',
+  procedure(Req: THorseRequest; Res: THorseResponse; Next: TNextProc)
+  begin
+    if not RequireRole(Req, Res, 'admin') then
+      Exit;
+    
+    // User is authenticated and has admin role
+    Res.Send('Admin users list');
+  end);
+```
+
+</Accordion>
+
+## Best Practices
+
+<Steps>
+
+<Step title="Use TryGetSession for safe access">
+  Always use `TryGetSession` when you're not sure if a session exists. This prevents exceptions and makes your code more robust.
+</Step>
+
+<Step title="Create session middleware">
+  Implement a middleware to load sessions at the beginning of each request, making session data available to all subsequent handlers.
+</Step>
+
+<Step title="Don't store large objects">
+  Keep session objects lightweight. Store only essential data like user IDs and tokens, not entire datasets.
+</Step>
+
+<Step title="Implement session persistence">
+  Use external storage (Redis, database, etc.) for session persistence across server restarts and load-balanced environments.
+</Step>
+
+</Steps>
+
+<Tip>
+For production applications, consider implementing a session store using Redis or a database to persist session data between requests and across server instances.
+</Tip>
+
+## Session Lifecycle
+
+The `THorseSessions` container is created for each request and destroyed at the end of the request lifecycle. This means:
+
+- Sessions are **not** automatically persisted between HTTP requests
+- You must implement your own session storage mechanism (cookies, tokens, etc.)
+- The session container automatically frees all session objects when the request completes
+
+## API Reference
+
+### THorseSessions
+
+| Method | Description |
+|--------|-------------|
+| `SetSession(ASessionClass, AInstance)` | Stores a session object by its class type |
+| `TryGetSession<T>(out ASession)` | Safely retrieves a session, returns true if found |
+| `Contains(ASessionClass)` | Checks if a session exists for the given class |
+| `Session[ASessionClass]` | Property to access session by class (can raise exception) |
+
+### TSession
+
+Base class for all session objects. Inherit from this class to create custom session types.
+
+---
+
+## Related Topics
+
+- [Middleware](/core/middleware) - Learn about middleware patterns
+- [Authentication](/api/middlewares/official#horse-jwt) - JWT authentication middleware
+- [Error Handling](/advanced/error-handling) - Handling session errors

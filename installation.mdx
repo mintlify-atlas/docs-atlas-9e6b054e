@@ -1,0 +1,471 @@
+---
+title: Installation
+description: Complete guide to installing and configuring Horse in your Delphi or Lazarus project
+---
+
+# Installation
+
+This guide covers all methods of installing Horse in your Delphi or Lazarus project, from the recommended Boss package manager to manual installation.
+
+## System Requirements
+
+<CardGroup cols={2}>
+  <Card title="Delphi" icon="d">
+    **Supported Versions:**
+    - Delphi 13 Florence
+    - Delphi 12 Athens
+    - Delphi 11 Alexandria
+    - Delphi 10.4 Sydney
+    - Delphi 10.3 Rio
+    - Delphi 10.2 Tokyo
+    - Delphi 10.1 Berlin
+    - Delphi 10 Seattle
+    - Delphi XE8
+    - Delphi XE7
+  </Card>
+  <Card title="Lazarus" icon="l">
+    **Supported Versions:**
+    - Lazarus 2.0+
+    - Free Pascal 3.0+
+    
+    **Platforms:**
+    - Windows
+    - Linux
+    - macOS
+  </Card>
+</CardGroup>
+
+## Method 1: Boss Package Manager (Recommended)
+
+[Boss](https://github.com/HashLoad/boss) is a dependency manager for Delphi and Lazarus that makes installing Horse and its dependencies simple.
+
+<Steps>
+  <Step title="Install Boss">
+    If you don't have Boss installed:
+    
+    **Windows:**
+    ```bash
+    # Download and run the installer from:
+    # https://github.com/HashLoad/boss/releases
+    ```
+    
+    **Linux/macOS:**
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/HashLoad/boss/master/scripts/install.sh | sh
+    ```
+  </Step>
+  
+  <Step title="Install Horse">
+    Open a terminal in your project directory and run:
+    
+    ```bash
+    boss install horse
+    ```
+    
+    Boss will automatically:
+    - Download Horse and its dependencies
+    - Configure library paths
+    - Update your project settings
+  </Step>
+  
+  <Step title="Verify Installation">
+    Check that Horse was installed:
+    
+    ```bash
+    boss list
+    ```
+    
+    You should see `horse` in the list of installed packages.
+  </Step>
+</Steps>
+
+<Note>
+  Boss automatically manages dependencies and keeps packages up to date. This is the recommended installation method.
+</Note>
+
+## Method 2: Manual Installation
+
+For manual installation without a package manager:
+
+<Steps>
+  <Step title="Download Horse">
+    Clone or download Horse from GitHub:
+    
+    ```bash
+    git clone https://github.com/HashLoad/horse.git
+    ```
+    
+    Or download the ZIP file from the [releases page](https://github.com/HashLoad/horse/releases).
+  </Step>
+  
+  <Step title="Add to Library Path (Delphi)">
+    1. Open Delphi IDE
+    2. Go to **Tools > Options**
+    3. Navigate to **Language > Delphi > Library**
+    4. Select your target platform (e.g., Windows 32-bit)
+    5. Click the **[...]** button next to "Library path"
+    6. Add the path to Horse's `src` folder:
+       ```
+       C:\path\to\horse\src
+       ```
+    7. Click **OK** to save
+  </Step>
+  
+  <Step title="Add to Search Path (Lazarus)">
+    1. Open Lazarus IDE
+    2. Go to **Project > Project Options**
+    3. Navigate to **Compiler Options > Paths**
+    4. In "Other unit files (-Fu)" add:
+       ```
+       /path/to/horse/src
+       ```
+    5. Click **OK** to save
+  </Step>
+  
+  <Step title="Add Horse to Uses Clause">
+    In your project, add Horse to the uses clause:
+    
+    ```delphi
+    uses
+      Horse;
+    ```
+  </Step>
+</Steps>
+
+## Method 3: Git Submodule
+
+For projects using Git, you can add Horse as a submodule:
+
+```bash
+# Add Horse as a submodule
+git submodule add https://github.com/HashLoad/horse.git lib/horse
+
+# Initialize and update submodules
+git submodule update --init --recursive
+```
+
+Then add `lib/horse/src` to your library path as described in Method 2.
+
+## Installing Middleware
+
+Horse has a rich ecosystem of middleware packages. Here's how to install them:
+
+### Using Boss
+
+```bash
+# JSON support
+boss install jhonson
+
+# CORS
+boss install horse-cors
+
+# JWT Authentication
+boss install horse-jwt
+
+# Basic Authentication
+boss install horse-basic-auth
+
+# Logging
+boss install horse-logger
+
+# Compression
+boss install horse-compression
+
+# Exception Handling
+boss install handle-exception
+
+# Stream Support
+boss install horse-octet-stream
+```
+
+### Manual Installation
+
+For each middleware:
+
+1. Clone the repository
+2. Add the `src` folder to your library path
+3. Add the middleware unit to your uses clause
+
+Example for CORS:
+
+```bash
+git clone https://github.com/HashLoad/horse-cors.git
+```
+
+Add to library path: `horse-cors/src`
+
+Use in code:
+```delphi
+uses
+  Horse,
+  Horse.CORS;
+
+begin
+  THorse.Use(CORS);
+  // ... rest of your code
+end.
+```
+
+## Project Configuration
+
+### Delphi Console Application
+
+1. Create a new **Console Application**
+2. Add `Horse` to the uses clause
+3. Add `{$APPTYPE CONSOLE}` directive
+
+```delphi
+program MyServer;
+
+{$APPTYPE CONSOLE}
+
+uses
+  Horse,
+  System.SysUtils;
+
+begin
+  // Your Horse code here
+end.
+```
+
+### Delphi VCL Application
+
+1. Create a new **VCL Forms Application**
+2. Add `Horse` to the uses clause
+3. **Important:** Add `HORSE_VCL` to project defines:
+   - Go to **Project > Options**
+   - Navigate to **Delphi Compiler > Compiling**
+   - In "Conditional defines" add: `HORSE_VCL`
+
+```delphi
+uses
+  Horse;
+
+// In your form's button click handler:
+procedure TForm1.btnStartClick(Sender: TObject);
+begin
+  THorse.Listen(9000);
+end;
+```
+
+### Delphi ISAPI Application
+
+1. Create a new **Web Broker Application**
+2. Choose **ISAPI Dynamic Link Library**
+3. Add `HORSE_ISAPI` to project defines
+4. Add `Horse` to the uses clause
+
+```delphi
+library MyISAPI;
+
+uses
+  Horse;
+
+{$R *.res}
+
+begin
+  // Horse automatically handles ISAPI requests
+  THorse.Get('/api/ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong');
+    end);
+end.
+```
+
+### Lazarus Console Application
+
+1. Create a new **Program**
+2. Add mode directive: `{$MODE DELPHI}{$H+}`
+3. Add `Horse` to the uses clause
+
+```pascal
+program MyServer;
+
+{$MODE DELPHI}{$H+}
+
+uses
+  Horse;
+
+begin
+  THorse.Get('/ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong');
+    end);
+  
+  THorse.Listen(9000);
+end.
+```
+
+### Lazarus Daemon
+
+1. Create a new **Program**
+2. Add `HORSE_DAEMON` to project defines
+3. Add `Horse` to the uses clause
+
+```pascal
+program MyDaemon;
+
+{$MODE DELPHI}{$H+}
+
+uses
+  Horse;
+
+begin
+  THorse.Get('/ping',
+    procedure(Req: THorseRequest; Res: THorseResponse)
+    begin
+      Res.Send('pong');
+    end);
+  
+  THorse.Listen(9000);
+end.
+```
+
+## Compilation Directives
+
+Horse uses compilation directives to support different deployment scenarios:
+
+| Directive | Purpose | Platform |
+|-----------|---------|----------|
+| `HORSE_VCL` | VCL application support | Delphi (Windows) |
+| `HORSE_ISAPI` | ISAPI module | Delphi (Windows) |
+| `HORSE_APACHE` | Apache module | Delphi/Lazarus |
+| `HORSE_CGI` | CGI application | Delphi/Lazarus |
+| `HORSE_FCGI` | FastCGI application | Lazarus |
+| `HORSE_DAEMON` | Daemon/Service | Delphi/Lazarus |
+| `HORSE_LCL` | LCL application | Lazarus |
+
+### Adding Compilation Directives
+
+**Delphi:**
+1. **Project > Options**
+2. **Delphi Compiler > Compiling**
+3. Add to "Conditional defines"
+
+**Lazarus:**
+1. **Project > Project Options**
+2. **Compiler Options > Custom Options**
+3. Add: `-dHORSE_VCL` (or other directive)
+
+## Verification
+
+Create a simple test to verify Horse is working:
+
+```delphi
+program TestHorse;
+
+{$APPTYPE CONSOLE}
+
+uses
+  Horse,
+  System.SysUtils;
+
+begin
+  try
+    Writeln('Horse Version: ', THorse.Version);
+    
+    THorse.Get('/test',
+      procedure(Req: THorseRequest; Res: THorseResponse)
+      begin
+        Res.Send('Horse is working!');
+      end);
+    
+    THorse.Listen(9000,
+      procedure
+      begin
+        Writeln('Server running on port 9000');
+        Writeln('Test: http://localhost:9000/test');
+        Writeln('Press Enter to stop...');
+        Readln;
+      end);
+  except
+    on E: Exception do
+      Writeln('Error: ', E.Message);
+  end;
+end.
+```
+
+Run this program and navigate to `http://localhost:9000/test` in your browser. You should see "Horse is working!".
+
+## Optional: Install Horse Wizard
+
+The [Horse Wizard](https://github.com/HashLoad/horse-wizard) is an IDE wizard that helps you create Horse projects quickly:
+
+```bash
+boss install horse-wizard
+```
+
+After installation, restart your IDE. You'll find new project templates under **File > New > Other > Horse**.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Unit Horse not found">
+    **Solution:**
+    - Verify the Horse `src` folder is in your library path
+    - Restart the IDE after adding the path
+    - Check that the path is correct for your target platform
+  </Accordion>
+  
+  <Accordion title="Access violation when starting server">
+    **Solution:**
+    - For VCL applications, ensure `HORSE_VCL` is defined
+    - For ISAPI, ensure `HORSE_ISAPI` is defined
+    - Check that you're using the correct provider for your project type
+  </Accordion>
+  
+  <Accordion title="Boss install fails">
+    **Solution:**
+    - Check your internet connection
+    - Verify Boss is properly installed: `boss --version`
+    - Try clearing Boss cache: `boss cache clean`
+    - Manually download and install if Boss continues to fail
+  </Accordion>
+  
+  <Accordion title="Port already in use">
+    **Solution:**
+    - Change the port in `THorse.Listen(port)`
+    - Check if another application is using the port
+    - Windows: `netstat -ano | findstr :9000`
+    - Linux: `netstat -tlnp | grep :9000`
+  </Accordion>
+  
+  <Accordion title="SSL/TLS support not working">
+    **Solution:**
+    - Horse requires OpenSSL DLLs for SSL support
+    - Download OpenSSL binaries for your platform
+    - Place `libeay32.dll` and `ssleay32.dll` in your application directory (Windows)
+    - Install OpenSSL package on Linux: `apt-get install libssl-dev`
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Build your first Horse application
+  </Card>
+  <Card title="Routing" icon="route" href="/core/routing">
+    Learn about routing and parameters
+  </Card>
+  <Card title="Middleware" icon="layer-group" href="/core/middleware">
+    Extend Horse with middleware
+  </Card>
+  <Card title="Examples" icon="code" href="/resources/examples">
+    Explore example projects
+  </Card>
+</CardGroup>
+
+## Getting Help
+
+If you encounter issues:
+
+- Check the [GitHub Issues](https://github.com/HashLoad/horse/issues)
+- Join the [Telegram community](https://t.me/hashload)
+- Review the [example projects](https://github.com/HashLoad/horse/tree/master/samples)
+
+<Note>
+  For production deployments, consider using middleware like `horse-exception` for error handling and `horse-logger` for request logging.
+</Note>
