@@ -1,0 +1,118 @@
+{
+  "projectType": "framework",
+  "projectName": "Horse",
+  "projectDescription": "Fast, opinionated, minimalist web framework for Delphi and Lazarus inspired by Express.js",
+  "theme": "aspen",
+  "primaryColor": "#816672",
+  "lightColor": "#2a303d",
+  "darkColor": "#e1e0df",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "core/routing",
+              "core/middleware",
+              "core/request-response",
+              "core/groups"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/console",
+              "deployment/vcl",
+              "deployment/apache",
+              "deployment/isapi",
+              "deployment/cgi",
+              "deployment/daemon",
+              "deployment/ssl"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/sessions",
+              "advanced/file-handling",
+              "advanced/error-handling",
+              "advanced/best-practices"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core API",
+            "pages": [
+              "api/thorse",
+              "api/thorse-request",
+              "api/thorse-response",
+              "api/callbacks"
+            ]
+          },
+          {
+            "group": "Middlewares",
+            "pages": [
+              "api/middlewares/official",
+              "api/middlewares/third-party"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Resources",
+        "groups": [
+          {
+            "group": "Community",
+            "pages": [
+              "resources/examples",
+              "resources/ecosystem",
+              "resources/contributing"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "HTTP routing with GET, POST, PUT, DELETE, PATCH, HEAD methods",
+    "Middleware system for request/response processing",
+    "Multiple deployment targets (Console, VCL, Apache, ISAPI, CGI, Daemon, FastCGI)",
+    "Route grouping with prefix support",
+    "Session management",
+    "File upload and download support",
+    "SSL/TLS support",
+    "Express.js-inspired API"
+  ],
+  "publicApiSurface": [
+    "THorse.Get(path, callback)",
+    "THorse.Post(path, callback)",
+    "THorse.Put(path, callback)",
+    "THorse.Delete(path, callback)",
+    "THorse.Patch(path, callback)",
+    "THorse.Head(path, callback)",
+    "THorse.All(path, callback)",
+    "THorse.Use(callback)",
+    "THorse.Use(path, callback)",
+    "THorse.Group()",
+    "THorse.Route(path)",
+    "THorse.Listen(port, host)",
+    "THorse.StopListen()",
+    "THorseRequest - Request object with Headers, Query, Params, Body, Cookie, Session",
+    "THorseResponse - Response object with Send, Status, SendFile, Download, AddHeader",
+    "THorseCallback - procedure(Req, Res, Next)"
+  ]
+}
