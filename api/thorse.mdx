@@ -308,6 +308,63 @@ THorse.Use('/api',
 THorse.Use([Middleware1, Middleware2, Middleware3]);
 ```
 
+### AddCallback
+
+Add a callback to a collection that will be registered with the next route definition.
+
+```delphi
+class function AddCallback(const ACallback: THorseCallback): THorseCore;
+```
+
+<ParamField path="ACallback" type="THorseCallback" required>
+  The callback function to add
+</ParamField>
+
+<ResponseField name="Result" type="THorseCore">
+  Returns the Horse instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+THorse
+  .AddCallback(AuthMiddleware)
+  .AddCallback(LoggingMiddleware)
+  .Get('/protected', GetProtectedResource);
+```
+
+### AddCallbacks
+
+Add multiple callbacks to a collection that will be registered with the next route definition.
+
+```delphi
+class function AddCallbacks(const ACallbacks: TArray<THorseCallback>): THorseCore;
+```
+
+<ParamField path="ACallbacks" type="TArray<THorseCallback>" required>
+  Array of callback functions to add
+</ParamField>
+
+<ResponseField name="Result" type="THorseCore">
+  Returns the Horse instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```delphi
+var
+  Middlewares: TArray<THorseCallback>;
+begin
+  SetLength(Middlewares, 2);
+  Middlewares[0] := AuthMiddleware;
+  Middlewares[1] := LoggingMiddleware;
+  
+  THorse
+    .AddCallbacks(Middlewares)
+    .Get('/protected', GetProtectedResource);
+end;
+```
+
 ## Grouping and Routing
 
 ### Route
@@ -488,6 +545,87 @@ class property MaxConnections: Integer read GetMaxConnections write SetMaxConnec
 ```delphi
 THorse.MaxConnections := 1000;
 THorse.Listen;
+```
+
+### ListenQueue
+
+Get or set the listen queue size (pending connections backlog).
+
+```delphi
+class property ListenQueue: Integer read GetListenQueue write SetListenQueue;
+```
+
+**Example:**
+
+```delphi
+THorse.ListenQueue := 50;
+THorse.Listen;
+```
+
+### KeepConnectionAlive
+
+Get or set whether to keep connections alive after requests.
+
+```delphi
+class property KeepConnectionAlive: Boolean read GetKeepConnectionAlive write SetKeepConnectionAlive;
+```
+
+**Example:**
+
+```delphi
+THorse.KeepConnectionAlive := True;
+THorse.Listen;
+```
+
+### IsRunning
+
+Check whether the Horse server is currently running.
+
+```delphi
+class function IsRunning: Boolean;
+```
+
+<ResponseField name="Result" type="Boolean">
+  Returns True if the server is running, False otherwise
+</ResponseField>
+
+**Example:**
+
+```delphi
+if THorse.IsRunning then
+  Writeln('Server is running')
+else
+  Writeln('Server is stopped');
+```
+
+## Module Methods
+
+### ToModule
+
+Convert the current Horse instance to a module that can be mounted in another Horse application.
+
+```delphi
+class function ToModule: THorseModule;
+```
+
+<ResponseField name="Result" type="THorseModule">
+  Returns a THorseModule that can be used in another Horse instance
+</ResponseField>
+
+**Example:**
+
+```delphi
+var
+  App, AdminModule: THorse;
+begin
+  AdminModule := THorse.Create;
+  AdminModule.Get('/users', GetUsers);
+  AdminModule.Get('/settings', GetSettings);
+  
+  App := THorse.Create;
+  App.Use('/admin', AdminModule.ToModule);
+  App.Listen(9000);
+end;
 ```
 
 ## Utility Methods
